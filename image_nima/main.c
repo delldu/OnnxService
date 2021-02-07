@@ -15,36 +15,89 @@
 #include <nimage/image.h>
 #include <nimage/nnmsg.h>
 
-#define URL "ipc:///tmp/nimage.ipc"
+#include "engine.h"
 
-// Echo Server
+#define URL "ipc:///tmp/image_nima.ipc"
+
+void dump(TENSOR *recv_tensor, int rescode)
+{
+	// dump scores ...
+}
+
+TENSOR *nima(OrtEngine *engine, TENSOR *input)
+{
+	size_t size, n_dims;
+	int64_t dims[4];
+	OrtValue *input_ortvalue, *output_ortvalue;
+	TENSOR *output = NULL;
+	float *f;
+
+	CHECK_TENSOR(input);
+
+	n_dims = 4;
+	dims[0] = input->batch;
+	dims[1] = input->chan;
+	dims[2] = input->height;
+	dims[3] = input->width;
+	size = input->batch * input->chan * input->height * input->width;
+	input_ortvalue = CreateTensor(n_dims, dims, input->data, size);
+
+	output_ortvalue = SimpleForward(engine, input_ortvalue);
+	if (ValidTensor(output_ortvalue)) {
+		n_dims = TensorDimensions(output_ortvalue, dims);
+		if (n_dims == 4) {
+			output = tensor_create((WORD)dims[0], (WORD)dims[1], (WORD)dims[2], (WORD)dims[2]);
+			CHECK_TENSOR(output);
+			size = output->batch * output->chan * output->height * output->width;
+			f = TensorValues(output_ortvalue);
+			memcpy(output->data, f, size * sizeof(float));
+		}
+		DestroyTensor(output_ortvalue);
+	}
+
+	DestroyTensor(input_ortvalue);
+
+	return output;
+}
+
 int server(char *endpoint)
 {
 	int socket, reqcode, count;
 	float option;
-	TENSOR *tensor;
+	TENSOR *input_tensor, *output_tensor;
+	OrtEngine *engine;
+	const char *model_onnx = "image_nima.onnx";
 
 	if ((socket = server_open(endpoint)) < 0)
 		return RET_ERROR;
 
+	engine = CreateEngine(model_onnx); CheckEngine(engine);
+
 	count = 0;
 	for (;;) {
-		if (count % 100 == 0)
-			syslog_info("Service %d times", count);
+		syslog_info("Service %d times", count);
 
-		tensor = request_recv(socket, &reqcode, &option);
+		input_tensor = request_recv(socket, &reqcode, &option);
 
-		if (!tensor_valid(tensor)) {
+		if (!tensor_valid(input_tensor)) {
 			syslog_error("Request recv bad tensor ...");
 			continue;
 		}
 		syslog_info("Request Code = %d, Option = %f", reqcode, option);
+
+		// Real service ...
+		output_tensor = nima(engine, input_tensor);
+
+		if (tensor_valid(output_tensor)) {
+			response_send(socket, output_tensor, reqcode);
+			tensor_destroy(output_tensor);
+		}
 		
-		response_send(socket, tensor, reqcode);
-		tensor_destroy(tensor);
+		tensor_destroy(input_tensor);
 
 		count++;
 	}
+	DestroyEngine(engine);
 
 	syslog(LOG_INFO, "Service shutdown.\n");
 	server_close(socket);
@@ -52,10 +105,10 @@ int server(char *endpoint)
 	return RET_OK;
 }
 
-int client(char *endpoint, char *input_file, char *output_file)
+int client(char *endpoint, char *input_file)
 {
 	int ret, rescode, socket;
-	IMAGE *send_image, *recv_image;
+	IMAGE *send_image;
 	TENSOR *send_tensor, *recv_tensor;
 
 	if ((socket = client_open(endpoint)) < 0)
@@ -79,11 +132,9 @@ int client(char *endpoint, char *input_file, char *output_file)
 
 			if (tensor_valid(recv_tensor)) {
 				// Process recv tensor ...
-				recv_image = image_from_tensor(recv_tensor, 0);
-				if (image_valid(recv_image)) {
-					ret = image_save(recv_image, output_file);
-					image_destroy(recv_image);
-				}
+
+				dump(recv_tensor, rescode);
+
 				tensor_destroy(recv_tensor);
 			}
 		}
@@ -92,7 +143,7 @@ int client(char *endpoint, char *input_file, char *output_file)
 	}
 	image_destroy(send_image);
 
-  finish:
+finish:
 	client_close(socket);
 
 	return ret;
@@ -100,14 +151,11 @@ int client(char *endpoint, char *input_file, char *output_file)
 
 void help(char *cmd)
 {
-	printf("This is simple an example for nimage, client send image to server and server echo back\n");
-
 	printf("Usage: %s [option]\n", cmd);
 	printf("    h, --help                   Display this help.\n");
 	printf("    e, --endpoint               Set endpoint.\n");
 	printf("    s, --server                 Start server.\n");
 	printf("    c, --client <file>          Client image.\n");
-	printf("    o, --output <file>          Output file (default: output.png).\n");
 
 	exit(1);
 }
@@ -120,21 +168,19 @@ int main(int argc, char **argv)
 	int option_index = 0;
 	char *client_file = NULL;
 	char *endpoint = (char *)URL;
-	char *output_file = (char *) "output.png";
 
 	struct option long_opts[] = {
 		{"help", 0, 0, 'h'},
 		{"endpoint", 1, 0, 'e'},
 		{"server", 0, 0, 's'},
 		{"client", 1, 0, 'c'},
-		{"output", 1, 0, 'o'},
 		{0, 0, 0, 0}
 	};
 
 	if (argc <= 1)
 		help(argv[0]);
 
-	while ((optc = getopt_long(argc, argv, "h e: s c: o:", long_opts, &option_index)) != EOF) {
+	while ((optc = getopt_long(argc, argv, "h e: s c:", long_opts, &option_index)) != EOF) {
 		switch (optc) {
 		case 'e':
 			endpoint = optarg;
@@ -142,11 +188,8 @@ int main(int argc, char **argv)
 		case 's':
 			running_server = 1;
 			break;
-		case 'c':				// Clean
+		case 'c':				// Client
 			client_file = optarg;
-			break;
-		case 'o':				// Output
-			output_file = optarg;
 			break;
 		case 'h':				// help
 		default:
@@ -158,7 +201,7 @@ int main(int argc, char **argv)
 	if (running_server)
 		return server(endpoint);
 	else if (client_file) {
-		return client(endpoint, client_file, output_file);
+		return client(endpoint, client_file);
 	}
 
 	help(argv[0]);

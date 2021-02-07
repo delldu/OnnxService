@@ -7,25 +7,25 @@
 #************************************************************************************/
 #
 INSTALL_DIR := /usr/local
+ONNXRUNTIME_INSTALL_DIR := /opt/onnxruntime
 
 TARGET := image_nima
 
 SOURCE :=  \
 	main.c \
 
-INCS	:= $(shell nimagetool --cflags)
+INCS	:= -I../lib -I$(ONNXRUNTIME_INSTALL_DIR)/include $(shell nimagetool --cflags)
 
-LIBS	:= $(shell nimagetool --libs)
+LIBS	:= -L../lib -lonnxeng -L$(ONNXRUNTIME_INSTALL_DIR)/lib -lonnxruntime $(shell nimagetool --libs)
 
-DEFINES :=
+DEFINES := -D_GLIBCXX_USE_CXX11_ABI=1 -std=c++14 -std=gnu++14
 
-CFLAGS := -O2 -fPIC -Wall -Wextra
+CXXFLAGS := -O2 -fPIC -Wall -Wextra
 LDFLAGS := -fPIC
 
 #****************************************************************************
 # Makefile code common to all platforms
 #****************************************************************************
-CFLAGS   := ${CFLAGS} ${DEFINES}
 CXXFLAGS := ${CXXFLAGS} ${DEFINES}
 
 OBJECT := $(addsuffix .o,$(basename ${SOURCE}))

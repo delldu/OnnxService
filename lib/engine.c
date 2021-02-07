@@ -21,12 +21,14 @@ const OrtApi *onnx_runtime_api = OrtGetApiBase()->GetApi(ORT_API_VERSION);
 void InitInputNodes(OrtEngine * t)
 {
 	size_t num_nodes;
+	size_t num_dims;
+	int64_t input_node_dims[4];
 	OrtAllocator *allocator;
 	CheckStatus(onnx_runtime_api->GetAllocatorWithDefaultOptions(&allocator));
 
 	CheckStatus(onnx_runtime_api->SessionGetInputCount(t->session, &num_nodes));
 
-	printf("Input nodes:\n");
+	syslog_info("Input nodes:");
 	for (size_t i = 0; i < num_nodes; i++) {
 		char *name;
 
@@ -42,19 +44,19 @@ void InitInputNodes(OrtEngine * t)
 		ONNXTensorElementDataType type;
 		CheckStatus(onnx_runtime_api->GetTensorElementType(tensor_info, &type));
 
-		size_t num_dims;
 		CheckStatus(onnx_runtime_api->GetDimensionsCount(tensor_info, &num_dims));
-		t->input_node_dims.resize(num_dims);
+		if (num_dims > 4)
+			num_dims = 4;
 
 		printf("    no=%zu name=\"%s\" type=%d dims=%zu: ", i, name, type, num_dims);
 
-		CheckStatus(onnx_runtime_api->GetDimensions(tensor_info, (int64_t *) t->input_node_dims.data(), num_dims));
+		CheckStatus(onnx_runtime_api->GetDimensions(tensor_info, (int64_t *) input_node_dims, num_dims));
 
 		for (size_t j = 0; j < num_dims; j++) {
 			if (j < num_dims - 1)
-				printf("%jd x ", t->input_node_dims[j]);
+				printf("%jd x ", input_node_dims[j]);	// xxxx8888
 			else
-				printf("%jd\n", t->input_node_dims[j]);
+				printf("%jd\n", input_node_dims[j]);
 		}
 
 		onnx_runtime_api->ReleaseTypeInfo(typeinfo);
@@ -64,6 +66,9 @@ void InitInputNodes(OrtEngine * t)
 
 void InitOutputNodes(OrtEngine * t)
 {
+	size_t num_dims;
+	int64_t output_node_dims[4];
+
 	OrtAllocator *allocator;
 
 	CheckStatus(onnx_runtime_api->GetAllocatorWithDefaultOptions(&allocator));
@@ -71,7 +76,7 @@ void InitOutputNodes(OrtEngine * t)
 	size_t num_nodes;
 	CheckStatus(onnx_runtime_api->SessionGetOutputCount(t->session, &num_nodes));
 
-	printf("Output nodes:\n");
+	syslog_info("Output nodes:");
 	for (size_t i = 0; i < num_nodes; i++) {
 		char *name;
 
@@ -87,18 +92,17 @@ void InitOutputNodes(OrtEngine * t)
 		ONNXTensorElementDataType type;
 		CheckStatus(onnx_runtime_api->GetTensorElementType(tensor_info, &type));
 
-		size_t num_dims;
 		CheckStatus(onnx_runtime_api->GetDimensionsCount(tensor_info, &num_dims));
-		t->output_node_dims.resize(num_dims);
-
+		if (num_dims > 4)
+			num_dims = 4;
 		printf("    no=%zu name=\"%s\" type=%d dims=%zu: ", i, name, type, num_dims);
 
-		CheckStatus(onnx_runtime_api->GetDimensions(tensor_info, (int64_t *) t->output_node_dims.data(), num_dims));
+		CheckStatus(onnx_runtime_api->GetDimensions(tensor_info, (int64_t *) output_node_dims, num_dims));
 		for (size_t j = 0; j < num_dims; j++) {
 			if (j < num_dims - 1)
-				printf("%jd x ", t->output_node_dims[j]);
+				printf("%jd x ", output_node_dims[j]);
 			else
-				printf("%jd\n", t->output_node_dims[j]);
+				printf("%jd\n", output_node_dims[j]);
 		}
 
 		onnx_runtime_api->ReleaseTypeInfo(typeinfo);
@@ -110,24 +114,25 @@ void CheckStatus(OrtStatus * status)
 {
 	if (status != NULL) {
 		const char *msg = onnx_runtime_api->GetErrorMessage(status);
-		fprintf(stderr, "%s\n", msg);
+		syslog_error("%s\n", msg);
 		onnx_runtime_api->ReleaseStatus(status);
 		exit(1);
 	}
 }
 
-void CheckTensor(OrtValue *tensor)
+// ValidTensor
+int ValidTensor(OrtValue *tensor)
 {
 	int is_tensor;
 	CheckStatus(onnx_runtime_api->IsTensor(tensor, &is_tensor));
 
 	if (! is_tensor) {
-		fprintf(stderr, "Tensor is not valid\n");
-		exit(1);
+		syslog_error("Tensor is not valid\n");
 	}
+	return is_tensor;
 }
 
-OrtValue *CreateTensor(std::vector < int64_t > &tensor_dims, float *data, size_t size)
+OrtValue *CreateTensor(size_t n_dims, int64_t *dims, float *data, size_t size)
 {
 	OrtStatus *status;
 	OrtValue *tensor = NULL;
@@ -136,36 +141,34 @@ OrtValue *CreateTensor(std::vector < int64_t > &tensor_dims, float *data, size_t
 	CheckStatus(onnx_runtime_api->CreateCpuMemoryInfo(OrtArenaAllocator, OrtMemTypeDefault, &memory_info));
 	status = onnx_runtime_api->CreateTensorWithDataAsOrtValue(memory_info,
 															  data, size * sizeof(float),
-															  tensor_dims.data(), tensor_dims.size(),
+															  dims, n_dims,
 															  ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &tensor);
 	CheckStatus(status);
 	onnx_runtime_api->ReleaseMemoryInfo(memory_info);
 
-	CheckTensor(tensor);
+	ValidTensor(tensor);
 
 	return tensor;
 }
 
-std::vector <int64_t> TensorDimensions(OrtValue* tensor)
+size_t TensorDimensions(OrtValue* tensor, int64_t *dims)
 {
-	std::vector < int64_t > dims;
+	size_t dim_count;
 
 	struct OrtTensorTypeAndShapeInfo* shape_info;
 	CheckStatus(onnx_runtime_api->GetTensorTypeAndShape(tensor, &shape_info));
 
-	size_t dim_count;
 	CheckStatus(onnx_runtime_api->GetDimensionsCount(shape_info, &dim_count));
 	if (dim_count != 4) {
-		fprintf(stderr, "tensor must have 4 dimensions");
+		syslog_error("Tensor must have 4 dimensions");
 		exit(-1);
 	}
-	dims.resize(dim_count);
 
-	CheckStatus(onnx_runtime_api->GetDimensions(shape_info, dims.data(), dims.size()));
+	CheckStatus(onnx_runtime_api->GetDimensions(shape_info, dims, dim_count));
 
 	onnx_runtime_api->ReleaseTensorTypeAndShapeInfo(shape_info);
 
-	return dims;
+	return dim_count;
 }
 
 float *TensorValues(OrtValue * tensor)
@@ -175,7 +178,8 @@ float *TensorValues(OrtValue * tensor)
 	return floatarray;
 }
 
-void ReleaseTensor(OrtValue * tensor)
+// DestroyTensor
+void DestroyTensor(OrtValue * tensor)
 {
 	onnx_runtime_api->ReleaseValue(tensor);
 }
@@ -184,11 +188,11 @@ OrtEngine *CreateEngine(const char *model_path)
 {
 	OrtEngine *t;
 
-	printf("Creating ONNX Runtime Engine for model %s ...\n", model_path);
+	syslog_info("Creating ONNX Runtime Engine for model %s ...\n", model_path);
 
 	t = (OrtEngine *) calloc((size_t) 1, sizeof(OrtEngine));
 	if (!t) {
-		fprintf(stderr, "Allocate memeory.");
+		syslog_error("Allocate memeory.");
 		return NULL;
 	}
 	t->magic = ENGINE_MAGIC;
@@ -217,7 +221,7 @@ OrtEngine *CreateEngine(const char *model_path)
 	// Setup output_node_names;
 	InitOutputNodes(t);
 
-	printf("Create ONNX Runtime Engine OK.\n");
+	syslog_info("Create ONNX Runtime Engine OK.\n");
 
 	return t;
 }
@@ -233,7 +237,7 @@ OrtValue *SimpleForward(OrtEngine * engine, OrtValue * input_tensor)
 	OrtStatus *status;
 	OrtValue *output_tensor = NULL;
 
-	CheckTensor(input_tensor);
+	ValidTensor(input_tensor);
 
 	/* prototype
 	   ORT_API2_STATUS(Run, _Inout_ OrtSession* sess, _In_opt_ const OrtRunOptions* run_options,
@@ -248,269 +252,25 @@ OrtValue *SimpleForward(OrtEngine * engine, OrtValue * input_tensor)
 
 	CheckStatus(status);
 
-	CheckTensor(output_tensor);
+	ValidTensor(output_tensor);
 
 	return output_tensor;
 }
 
-void ReleaseEngine(OrtEngine * engine)
+// DestroyEngine
+void DestroyEngine(OrtEngine * engine)
 {
 	if (!ValidEngine(engine))
 		return;
 
 	// Release ...
 	engine->input_node_names.clear();
-	engine->input_node_dims.clear();
 	engine->output_node_names.clear();
-	engine->output_node_dims.clear();
 
 	onnx_runtime_api->ReleaseSession(engine->session);
 	onnx_runtime_api->ReleaseSessionOptions(engine->session_options);
 	onnx_runtime_api->ReleaseEnv(engine->env);
 
 	free(engine);
-}
-
-void EngineTest()
-{
-	OrtEngine *engine;
-
-	engine = CreateEngine("demo.onnx");
-	CheckEngine(engine);
-
-	size_t input_tensor_size = 512 * 512 * 3;	// simplify ... using known dim values to calculate size
-	// use OrtGetTensorShapeElementCount() to get official size!
-	std::vector < float >input_tensor_values(input_tensor_size);
-	// initialize input data with values in [0.0, 1.0]
-	for (size_t i = 0; i < input_tensor_size; i++)
-		input_tensor_values[i] = (float) i / (input_tensor_size + 1);
-
-	OrtValue *input_tensor = CreateTensor(engine->input_node_dims, input_tensor_values.data(), input_tensor_size);
-
-	OrtValue *output_tensor;
-
-	for (int k = 0; k < 1; k++) {
-		output_tensor = SimpleForward(engine, input_tensor);
-		float *f = TensorValues(output_tensor);
-
-		for (int i = 0; i < 5; i++) {
-			printf("Score for class [%d] =  %f\n", i, f[i]);
-		}
-		ReleaseTensor(output_tensor);
-	}
-
-	ReleaseTensor(input_tensor);
-
-	ReleaseEngine(engine);
-}
-
-/****************************************************************************
-* Request Tensor format:
-*	int reqcode,
-*	Tensor: int [BxCxHxW], float [d1, ..., dn]
-*	float option
-****************************************************************************/
-int ReqTensorEncode(int reqcode, OrtValue *tensor, float option, msgpack_sbuffer *sbuf)
-{
-	size_t i, n;
-	float *f;
-    msgpack_packer pk;
-	CheckTensor(tensor);
-	std::vector <int64_t> dims = TensorDimensions(tensor);
-    for (n = 1, i = 0; i < dims.size(); i++)
-	    n *= dims.at(i);
-    f = TensorValues(tensor);
-
-	// Encode start ...
-    msgpack_sbuffer_init(sbuf);
-    msgpack_packer_init(&pk, sbuf, msgpack_sbuffer_write);
-
-    // Encode reqcode
-    msgpack_pack_int(&pk, reqcode);
-
-    // Encode tensor dims
-    msgpack_pack_array(&pk, dims.size());
-    for (i = 0; i < dims.size(); i++)
-	    msgpack_pack_int(&pk, dims.at(i));
-
-    // Encode tensor data
-    msgpack_pack_array(&pk, n);
-    for (i = 0; i < n; i++)
-    	msgpack_pack_float(&pk, *f++);
-
-    // Encode option
-    msgpack_pack_float(&pk, option);
-
-	return RET_OK;
-}
-
-OrtValue *ReqTensorDecode(char const* buf, size_t size, int *reqcode, float *option)
-{
-    size_t off = 0;
-    msgpack_unpacked result;
-    msgpack_unpack_return ret;
-	OrtValue *tensor = NULL;
-	std::vector <int64_t> dims;
-	std::vector <float> data;
-
-    msgpack_unpacked_init(&result);
-
-    // Decode reqcode
-    *reqcode = 0;
-    ret = msgpack_unpack_next(&result, buf, size, &off);
-    if (ret == MSGPACK_UNPACK_SUCCESS) {
-        msgpack_object obj = result.data;
-        if (obj.type == MSGPACK_OBJECT_POSITIVE_INTEGER) {
-        	*reqcode = (int)obj.via.u64;
-        } else if (obj.type == MSGPACK_OBJECT_NEGATIVE_INTEGER) {
-        	*reqcode = (int)obj.via.i64;
-        }
-    }
-
-    // Decode tensor dims
-    ret = msgpack_unpack_next(&result, buf, size, &off);
-    if (ret == MSGPACK_UNPACK_SUCCESS) {
-        msgpack_object obj = result.data;
-        if (obj.type == MSGPACK_OBJECT_ARRAY && obj.via.array.size != 0 ) {
-	        msgpack_object* p = obj.via.array.ptr;
-	        msgpack_object* const pend = obj.via.array.ptr + obj.via.array.size;
-	        for(; p < pend; ++p)
-	        	dims.push_back((int)(p->via.i64));
-        }
-    }
-
-    // Decode tensor data
-    ret = msgpack_unpack_next(&result, buf, size, &off);
-    if (ret == MSGPACK_UNPACK_SUCCESS) {
-        msgpack_object obj = result.data;
-        if (obj.type == MSGPACK_OBJECT_ARRAY && obj.via.array.size != 0 ) {
-	        msgpack_object* p = obj.via.array.ptr;
-	        msgpack_object* const pend = obj.via.array.ptr + obj.via.array.size;
-	        for(; p < pend; ++p)
-	        	data.push_back((float)(p->via.f64));
-        }
-    }
-
-    // Decode tensor option
-    *option = 0;
-    ret = msgpack_unpack_next(&result, buf, size, &off);
-    if (ret == MSGPACK_UNPACK_SUCCESS) {
-        msgpack_object obj = result.data;
-        if (obj.type == MSGPACK_OBJECT_FLOAT) {
-        	*option = (float)obj.via.f64;
-        }
-    }
-
-    // Check buffer decode over status
-	if (ret == MSGPACK_UNPACK_PARSE_ERROR) {
-        fprintf(stderr, "The data in buf is invalid format.\n");
-	}
-    msgpack_unpacked_destroy(&result);
-
-    // Save tensor
-    tensor = CreateTensor(dims, data.data(), data.size());
-
-    dims.clear();
-    data.clear();
-
-    return tensor;
-}
-
-/****************************************************************************
-* Response Tensor format:
-*	Tensor: int [BxCxHxW], float [d1, ..., dn]
-*	int rescode
-****************************************************************************/
-int ResTensorEncode(OrtValue *tensor, int rescode, msgpack_sbuffer *sbuf)
-{
-	size_t i, n;
-	float *f;
-    msgpack_packer pk;
-	CheckTensor(tensor);
-	std::vector <int64_t> dims = TensorDimensions(tensor);
-    for (n = 1, i = 0; i < dims.size(); i++)
-	    n *= dims.at(i);
-
-	// Encode start ...
-    msgpack_sbuffer_init(sbuf);
-    msgpack_packer_init(&pk, sbuf, msgpack_sbuffer_write);
-
-    // Encode tensor dims
-    msgpack_pack_array(&pk, dims.size());
-    for (i = 0; i < dims.size(); i++)
-	    msgpack_pack_int(&pk, dims.at(i));
-
-    // Encode tensor data
-    msgpack_pack_array(&pk, n);
-    f = TensorValues(tensor);
-    for (i = 0; i < n; i++)
-    	msgpack_pack_float(&pk, *f++);
-
-    // Encode reqcode
-    msgpack_pack_int(&pk, rescode);
-
-	return RET_OK;	
-}
-
-OrtValue *ResTensorDecode(char const* buf, size_t size, int *rescode)
-{
-    size_t off = 0;
-    msgpack_unpacked result;
-    msgpack_unpack_return ret;
-	OrtValue *tensor = NULL;
-	std::vector <int64_t> dims;
-	std::vector <float> data;
-
-    msgpack_unpacked_init(&result);
-
-    // Decode tensor dims
-    ret = msgpack_unpack_next(&result, buf, size, &off);
-    if (ret == MSGPACK_UNPACK_SUCCESS) {
-        msgpack_object obj = result.data;
-        if (obj.type == MSGPACK_OBJECT_ARRAY && obj.via.array.size != 0 ) {
-	        msgpack_object* p = obj.via.array.ptr;
-	        msgpack_object* const pend = obj.via.array.ptr + obj.via.array.size;
-	        for(; p < pend; ++p)
-	        	dims.push_back((int)(p->via.i64));
-        }
-    }
-
-    // Decode tensor data
-    ret = msgpack_unpack_next(&result, buf, size, &off);
-    if (ret == MSGPACK_UNPACK_SUCCESS) {
-        msgpack_object obj = result.data;
-        if (obj.type == MSGPACK_OBJECT_ARRAY && obj.via.array.size != 0 ) {
-	        msgpack_object* p = obj.via.array.ptr;
-	        msgpack_object* const pend = obj.via.array.ptr + obj.via.array.size;
-	        for(; p < pend; ++p)
-	        	data.push_back((float)(p->via.f64));
-        }
-    }
-
-    // Decode tensor response code
-    *rescode = 0;
-    ret = msgpack_unpack_next(&result, buf, size, &off);
-    if (ret == MSGPACK_UNPACK_SUCCESS) {
-        msgpack_object obj = result.data;
-        if (obj.type == MSGPACK_OBJECT_POSITIVE_INTEGER) {
-        	*rescode = (int)obj.via.u64;
-        } else if (obj.type == MSGPACK_OBJECT_NEGATIVE_INTEGER) {
-        	*rescode = (int)obj.via.i64;
-        }
-    }
-
-    // Check buffer decode over status
-	if (ret == MSGPACK_UNPACK_PARSE_ERROR) {
-        fprintf(stderr, "The data in buf is invalid format.\n");
-	}
-    msgpack_unpacked_destroy(&result);
-
-    // Save tensor
-    tensor = CreateTensor(dims, data.data(), data.size());
-
-    dims.clear();
-    data.clear();
-
-    return tensor;
 }
 

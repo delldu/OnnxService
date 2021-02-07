@@ -6,12 +6,11 @@
 #***
 #************************************************************************************/
 #
-CC := gcc
 ONNXRUNTIME_INSTALL_DIR := /opt/onnxruntime
 
 LIB_NAME := libonnxeng
 
-INCS	:= -I$(ONNXRUNTIME_INSTALL_DIR)/include 
+INCS	:= -I$(ONNXRUNTIME_INSTALL_DIR)/include $(shell nimagetool --cflags)
 
 SOURCE :=  \
 	engine.c

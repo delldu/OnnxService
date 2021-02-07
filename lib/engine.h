@@ -14,12 +14,7 @@
 #include <stdlib.h>
 #include <vector>
 #include <onnxruntime_c_api.h>
-#include <msgpack.h>
-
-#define DWORD uint32_t
-#define CheckPoint(fmt, arg...) printf("# CheckPoint: %d(%s): " fmt "\n", (int)__LINE__, __FILE__, ##arg)
-#define RET_OK 0
-#define RET_ERROR (-1)
+#include <nimage/image.h>
 
 // ONNX Runtime Engine
 typedef struct {
@@ -30,11 +25,8 @@ typedef struct {
 	OrtSession *session;
 	OrtSessionOptions *session_options;
 
-	 std::vector < const char *>input_node_names;
-	 std::vector < int64_t > input_node_dims;	// classical model has only 1 input node {1, 3, 224, 224}.
-
-	 std::vector < const char *>output_node_names;
-	 std::vector < int64_t > output_node_dims;	// classical model has only 1 output node {1, 1000, 1, 1}.
+	std::vector < const char *>input_node_names;
+	std::vector < const char *>output_node_names;
 } OrtEngine;
 
 #define CheckEngine(e) \
@@ -45,25 +37,17 @@ typedef struct {
             } \
     } while(0)
 
-void CheckStatus(OrtStatus * status);
-void CheckTensor(OrtValue *tensor);
+void CheckStatus(OrtStatus *status);
 
-OrtValue *CreateTensor(std::vector < int64_t > &tensor_dims, float *data, size_t size);
-std::vector <int64_t> TensorDimensions(OrtValue* tensor);
+OrtValue *CreateTensor(size_t n_dims, int64_t *dims, float *data, size_t size);
+int ValidTensor(OrtValue *tensor);
+size_t TensorDimensions(OrtValue* tensor, int64_t *dims);
 float *TensorValues(OrtValue * tensor);
-void ReleaseTensor(OrtValue * tensor);
+void DestroyTensor(OrtValue * tensor);
 
 OrtEngine *CreateEngine(const char *model_path);
 int ValidEngine(OrtEngine * engine);
 OrtValue *SimpleForward(OrtEngine *engine, OrtValue * input_tensor);
-void ReleaseEngine(OrtEngine * engine);
+void DestroyEngine(OrtEngine *engine);
 
-void EngineTest();
-
-int ReqTensorEncode(int reqcode, OrtValue *tensor, float option, msgpack_sbuffer *sbuf);
-OrtValue *ReqTensorDecode(char const* buf, size_t size, int *reqcode, float *option);
-int ResTensorEncode(OrtValue *tensor, int rescode, msgpack_sbuffer *sbuf);
-OrtValue *ResTensorDecode(char const* buf, size_t size, int *rescode);
-
-
-#endif							// _ENGINE_H
+#endif // _ENGINE_H
