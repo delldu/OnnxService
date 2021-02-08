@@ -18,55 +18,24 @@
 #include "engine.h"
 
 #define URL "ipc:///tmp/image_nima.ipc"
+const char *model_onnx = "image_nima.onnx";
 
 void dump(TENSOR *recv_tensor, int rescode)
 {
 	// dump scores ...
-}
-
-TENSOR *nima(OrtEngine *engine, TENSOR *input)
-{
-	size_t size, n_dims;
-	int64_t dims[4];
-	OrtValue *input_ortvalue, *output_ortvalue;
-	TENSOR *output = NULL;
-	float *f;
-
-	CHECK_TENSOR(input);
-
-	n_dims = 4;
-	dims[0] = input->batch;
-	dims[1] = input->chan;
-	dims[2] = input->height;
-	dims[3] = input->width;
-	size = input->batch * input->chan * input->height * input->width;
-	input_ortvalue = CreateTensor(n_dims, dims, input->data, size);
-
-	output_ortvalue = SimpleForward(engine, input_ortvalue);
-	if (ValidTensor(output_ortvalue)) {
-		n_dims = TensorDimensions(output_ortvalue, dims);
-		if (n_dims == 4) {
-			output = tensor_create((WORD)dims[0], (WORD)dims[1], (WORD)dims[2], (WORD)dims[2]);
-			CHECK_TENSOR(output);
-			size = output->batch * output->chan * output->height * output->width;
-			f = TensorValues(output_ortvalue);
-			memcpy(output->data, f, size * sizeof(float));
-		}
-		DestroyTensor(output_ortvalue);
+	IMAGE *image = image_from_tensor(recv_tensor, 0);
+	if (image_valid(image)) {
+		image_save(image, "output.png");
+		image_destroy(image);
 	}
-
-	DestroyTensor(input_ortvalue);
-
-	return output;
 }
 
 int server(char *endpoint)
 {
-	int socket, reqcode, count;
+	int socket, reqcode, count, rescode;
 	float option;
 	TENSOR *input_tensor, *output_tensor;
 	OrtEngine *engine;
-	const char *model_onnx = "image_nima.onnx";
 
 	if ((socket = server_open(endpoint)) < 0)
 		return RET_ERROR;
@@ -86,10 +55,11 @@ int server(char *endpoint)
 		syslog_info("Request Code = %d, Option = %f", reqcode, option);
 
 		// Real service ...
-		output_tensor = nima(engine, input_tensor);
+		output_tensor = TensorForward(engine, input_tensor);
 
 		if (tensor_valid(output_tensor)) {
-			response_send(socket, output_tensor, reqcode);
+			rescode = reqcode;
+			response_send(socket, output_tensor, rescode);
 			tensor_destroy(output_tensor);
 		}
 		
@@ -129,12 +99,9 @@ int client(char *endpoint, char *input_file)
 		if (ret == RET_OK) {
 			// Recv
 			recv_tensor = response_recv(socket, &rescode);
-
 			if (tensor_valid(recv_tensor)) {
 				// Process recv tensor ...
-
 				dump(recv_tensor, rescode);
-
 				tensor_destroy(recv_tensor);
 			}
 		}
