@@ -12,7 +12,7 @@
 #include <assert.h>
 #include "engine.h"
 
-// /opt/onnxruntime-linux-x64-gpu-1.6.0/include/cuda_provider_factory.h
+// opt/onnxruntime-linux-x64-gpu-1.6.0/include/cuda_provider_factory.h
 #include <cuda_provider_factory.h>
 
 // ONNX Runtime Engine
@@ -122,7 +122,7 @@ void CheckStatus(OrtStatus * status)
 	}
 }
 
-int ValidTensor(OrtValue * tensor)
+int ValidOrtTensor(OrtValue * tensor)
 {
 	int is_tensor;
 	CheckStatus(onnx_runtime_api->IsTensor(tensor, &is_tensor));
@@ -156,7 +156,7 @@ OrtValue *CreateOrtTensor(TENSOR * tensor)
 	CheckStatus(status);
 	onnx_runtime_api->ReleaseMemoryInfo(memory_info);
 
-	ValidTensor(orttensor);
+	ValidOrtTensor(orttensor);
 
 	return orttensor;
 }
@@ -193,7 +193,7 @@ void DestroyOrtTensor(OrtValue * tensor)
 	onnx_runtime_api->ReleaseValue(tensor);
 }
 
-OrtEngine *CreateEngine(const char *model_path)
+OrtEngine *CreateEngine(const char *model_path, int use_gpu)
 {
 	OrtEngine *t;
 
@@ -220,7 +220,8 @@ OrtEngine *CreateEngine(const char *model_path)
 
 	// Optionally add more execution providers via session_options
 	// E.g. for CUDA include cuda_provider_factory.h and uncomment the following line:
-	CheckStatus(OrtSessionOptionsAppendExecutionProvider_CUDA(t->session_options, 0));
+	if (use_gpu)
+		CheckStatus(OrtSessionOptionsAppendExecutionProvider_CUDA(t->session_options, 0));
 
 	CheckStatus(onnx_runtime_api->CreateSession(t->env, model_path, t->session_options, &(t->session)));
 
@@ -245,7 +246,7 @@ OrtValue *SimpleForward(OrtEngine * engine, OrtValue * input_tensor)
 	OrtStatus *status;
 	OrtValue *output_tensor = NULL;
 
-	ValidTensor(input_tensor);
+	ValidOrtTensor(input_tensor);
 
 	/* prototype
 	   ORT_API2_STATUS(Run, _Inout_ OrtSession* sess, _In_opt_ const OrtRunOptions* run_options,
@@ -260,7 +261,7 @@ OrtValue *SimpleForward(OrtEngine * engine, OrtValue * input_tensor)
 
 	CheckStatus(status);
 
-	ValidTensor(output_tensor);
+	ValidOrtTensor(output_tensor);
 
 	return output_tensor;
 }
@@ -277,7 +278,7 @@ TENSOR *TensorForward(OrtEngine * engine, TENSOR * input)
 	input_ortvalue = CreateOrtTensor(input);
 
 	output_ortvalue = SimpleForward(engine, input_ortvalue);
-	if (ValidTensor(output_ortvalue)) {
+	if (ValidOrtTensor(output_ortvalue)) {
 		n_dims = OrtTensorDimensions(output_ortvalue, dims);
 		if (n_dims == 4) {
 			output = tensor_create((WORD) dims[0], (WORD) dims[1], (WORD) dims[2], (WORD) dims[2]);
@@ -309,7 +310,7 @@ void DestroyEngine(OrtEngine * engine)
 	free(engine);
 }
 
-int OnnxService(char *endpoint, char *onnx_file)
+int OnnxService(char *endpoint, char *onnx_file, int use_gpu)
 {
 	float option;
 	int socket, reqcode, count, rescode;
@@ -319,7 +320,7 @@ int OnnxService(char *endpoint, char *onnx_file)
 	if ((socket = server_open(endpoint)) < 0)
 		return RET_ERROR;
 
-	engine = CreateEngine(onnx_file);
+	engine = CreateEngine(onnx_file, use_gpu);
 	CheckEngine(engine);
 
 	count = 0;
@@ -337,7 +338,7 @@ int OnnxService(char *endpoint, char *onnx_file)
 		// Real service ...
 		time_reset();
 		output_tensor = TensorForward(engine, input_tensor);
-		time_spend("Infer");
+		time_spend((char *)"Infer");
 
 		if (tensor_valid(output_tensor)) {
 			rescode = reqcode;

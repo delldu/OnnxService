@@ -21,12 +21,14 @@
 
 int server(char *endpoint)
 {
-	return OnnxService(endpoint, "image_nima.onnx");
+	return OnnxService(endpoint, (char *)"image_nima.onnx", 0 /*use_gpu*/);
 }
 
 void dump(TENSOR * recv_tensor, int rescode)
 {
 	// dump scores ...
+	(void)rescode;
+
 	IMAGE *image = image_from_tensor(recv_tensor, 0);
 	if (image_valid(image)) {
 		image_save(image, "output.png");

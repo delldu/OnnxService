@@ -6,7 +6,6 @@
 ***
 ************************************************************************************/
 
-
 #ifndef _ENGINE_H
 #define _ENGINE_H
 
@@ -15,6 +14,7 @@
 #include <vector>
 #include <onnxruntime_c_api.h>
 #include <nimage/image.h>
+#include <nimage/nnmsg.h>
 
 // ONNX Runtime Engine
 typedef struct {
@@ -45,13 +45,13 @@ size_t OrtTensorDimensions(OrtValue * tensor, int64_t * dims);
 float *OrtTensorValues(OrtValue * tensor);
 void DestroyOrtTensor(OrtValue * tensor);
 
-OrtEngine *CreateEngine(const char *model_path);
+OrtEngine *CreateEngine(const char *model_path, int use_gpu);
 int ValidEngine(OrtEngine * engine);
 OrtValue *SimpleForward(OrtEngine * engine, OrtValue * input_tensor);
 TENSOR *TensorForward(OrtEngine * engine, TENSOR * input);
 void DestroyEngine(OrtEngine * engine);
 
-int OnnxService(char *endpoint, char *onnx_file);
+int OnnxService(char *endpoint, char *onnx_file, int use_gpu);
 TENSOR *OnnxRPC(int socket, TENSOR * input, int reqcode, float option, int *rescode);
 
 #endif							// _ENGINE_H
