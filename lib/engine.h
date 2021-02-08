@@ -25,8 +25,8 @@ typedef struct {
 	OrtSession *session;
 	OrtSessionOptions *session_options;
 
-	std::vector < const char *>input_node_names;
-	std::vector < const char *>output_node_names;
+	 std::vector < const char *>input_node_names;
+	 std::vector < const char *>output_node_names;
 } OrtEngine;
 
 #define CheckEngine(e) \
@@ -37,17 +37,21 @@ typedef struct {
             } \
     } while(0)
 
-void CheckStatus(OrtStatus *status);
+void CheckStatus(OrtStatus * status);
 
-OrtValue *CreateTensor(size_t n_dims, int64_t *dims, float *data, size_t size);
-int ValidTensor(OrtValue *tensor);
-size_t TensorDimensions(OrtValue* tensor, int64_t *dims);
-float *TensorValues(OrtValue * tensor);
-void DestroyTensor(OrtValue * tensor);
+OrtValue *CreateOrtTensor(TENSOR * tensor);
+int ValidOrtTensor(OrtValue * tensor);
+size_t OrtTensorDimensions(OrtValue * tensor, int64_t * dims);
+float *OrtTensorValues(OrtValue * tensor);
+void DestroyOrtTensor(OrtValue * tensor);
 
 OrtEngine *CreateEngine(const char *model_path);
 int ValidEngine(OrtEngine * engine);
-OrtValue *SimpleForward(OrtEngine *engine, OrtValue * input_tensor);
-void DestroyEngine(OrtEngine *engine);
+OrtValue *SimpleForward(OrtEngine * engine, OrtValue * input_tensor);
+TENSOR *TensorForward(OrtEngine * engine, TENSOR * input);
+void DestroyEngine(OrtEngine * engine);
 
-#endif // _ENGINE_H
+int OnnxService(char *endpoint, char *onnx_file);
+TENSOR *OnnxRPC(int socket, TENSOR * input, int reqcode, float option, int *rescode);
+
+#endif							// _ENGINE_H

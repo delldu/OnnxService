@@ -11,6 +11,8 @@
 
 #include <assert.h>
 #include "engine.h"
+
+// /opt/onnxruntime-linux-x64-gpu-1.6.0/include/cuda_provider_factory.h
 #include <cuda_provider_factory.h>
 
 // ONNX Runtime Engine
@@ -120,42 +122,50 @@ void CheckStatus(OrtStatus * status)
 	}
 }
 
-// ValidTensor
-int ValidTensor(OrtValue *tensor)
+int ValidTensor(OrtValue * tensor)
 {
 	int is_tensor;
 	CheckStatus(onnx_runtime_api->IsTensor(tensor, &is_tensor));
 
-	if (! is_tensor) {
+	if (!is_tensor) {
 		syslog_error("Tensor is not valid\n");
 	}
 	return is_tensor;
 }
 
-OrtValue *CreateTensor(size_t n_dims, int64_t *dims, float *data, size_t size)
+OrtValue *CreateOrtTensor(TENSOR * tensor)
 {
+	size_t size, n_dims;
+	int64_t dims[4];
 	OrtStatus *status;
-	OrtValue *tensor = NULL;
+	OrtValue *orttensor = NULL;
+
+	n_dims = 4;
+	dims[0] = tensor->batch;
+	dims[1] = tensor->chan;
+	dims[2] = tensor->height;
+	dims[3] = tensor->width;
+	size = tensor->batch * tensor->chan * tensor->height * tensor->width;
 
 	OrtMemoryInfo *memory_info;
 	CheckStatus(onnx_runtime_api->CreateCpuMemoryInfo(OrtArenaAllocator, OrtMemTypeDefault, &memory_info));
 	status = onnx_runtime_api->CreateTensorWithDataAsOrtValue(memory_info,
-															  data, size * sizeof(float),
+															  tensor->data, size * sizeof(float),
 															  dims, n_dims,
-															  ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &tensor);
+															  ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &orttensor);
 	CheckStatus(status);
 	onnx_runtime_api->ReleaseMemoryInfo(memory_info);
 
-	ValidTensor(tensor);
+	ValidTensor(orttensor);
 
-	return tensor;
+	return orttensor;
 }
 
-size_t TensorDimensions(OrtValue* tensor, int64_t *dims)
+size_t OrtTensorDimensions(OrtValue * tensor, int64_t * dims)
 {
 	size_t dim_count;
 
-	struct OrtTensorTypeAndShapeInfo* shape_info;
+	struct OrtTensorTypeAndShapeInfo *shape_info;
 	CheckStatus(onnx_runtime_api->GetTensorTypeAndShape(tensor, &shape_info));
 
 	CheckStatus(onnx_runtime_api->GetDimensionsCount(shape_info, &dim_count));
@@ -171,15 +181,14 @@ size_t TensorDimensions(OrtValue* tensor, int64_t *dims)
 	return dim_count;
 }
 
-float *TensorValues(OrtValue * tensor)
+float *OrtTensorValues(OrtValue * tensor)
 {
 	float *floatarray;
 	CheckStatus(onnx_runtime_api->GetTensorMutableData(tensor, (void **) &floatarray));
 	return floatarray;
 }
 
-// DestroyTensor
-void DestroyTensor(OrtValue * tensor)
+void DestroyOrtTensor(OrtValue * tensor)
 {
 	onnx_runtime_api->ReleaseValue(tensor);
 }
@@ -231,7 +240,6 @@ int ValidEngine(OrtEngine * t)
 	return (!t || t->magic != ENGINE_MAGIC) ? 0 : 1;
 }
 
-// SimpleForward
 OrtValue *SimpleForward(OrtEngine * engine, OrtValue * input_tensor)
 {
 	OrtStatus *status;
@@ -257,7 +265,34 @@ OrtValue *SimpleForward(OrtEngine * engine, OrtValue * input_tensor)
 	return output_tensor;
 }
 
-// DestroyEngine
+TENSOR *TensorForward(OrtEngine * engine, TENSOR * input)
+{
+	size_t size, n_dims;
+	int64_t dims[4];
+	OrtValue *input_ortvalue, *output_ortvalue;
+	TENSOR *output = NULL;
+
+	CHECK_TENSOR(input);
+
+	input_ortvalue = CreateOrtTensor(input);
+
+	output_ortvalue = SimpleForward(engine, input_ortvalue);
+	if (ValidTensor(output_ortvalue)) {
+		n_dims = OrtTensorDimensions(output_ortvalue, dims);
+		if (n_dims == 4) {
+			output = tensor_create((WORD) dims[0], (WORD) dims[1], (WORD) dims[2], (WORD) dims[2]);
+			CHECK_TENSOR(output);
+			size = output->batch * output->chan * output->height * output->width;
+			memcpy(output->data, OrtTensorValues(output_ortvalue), size * sizeof(float));
+		}
+		DestroyOrtTensor(output_ortvalue);
+	}
+
+	DestroyOrtTensor(input_ortvalue);
+
+	return output;
+}
+
 void DestroyEngine(OrtEngine * engine)
 {
 	if (!ValidEngine(engine))
@@ -274,3 +309,63 @@ void DestroyEngine(OrtEngine * engine)
 	free(engine);
 }
 
+int OnnxService(char *endpoint, char *onnx_file)
+{
+	float option;
+	int socket, reqcode, count, rescode;
+	TENSOR *input_tensor, *output_tensor;
+	OrtEngine *engine;
+
+	if ((socket = server_open(endpoint)) < 0)
+		return RET_ERROR;
+
+	engine = CreateEngine(onnx_file);
+	CheckEngine(engine);
+
+	count = 0;
+	for (;;) {
+		syslog_info("Service %d times", count);
+
+		input_tensor = request_recv(socket, &reqcode, &option);
+
+		if (!tensor_valid(input_tensor)) {
+			syslog_error("Request recv bad tensor ...");
+			continue;
+		}
+		syslog_info("Request Code = %d, Option = %f", reqcode, option);
+
+		// Real service ...
+		time_reset();
+		output_tensor = TensorForward(engine, input_tensor);
+		time_spend("Infer");
+
+		if (tensor_valid(output_tensor)) {
+			rescode = reqcode;
+			response_send(socket, output_tensor, rescode);
+			tensor_destroy(output_tensor);
+		}
+
+		tensor_destroy(input_tensor);
+
+		count++;
+	}
+	DestroyEngine(engine);
+
+	syslog(LOG_INFO, "Service shutdown.\n");
+	server_close(socket);
+
+	return RET_OK;
+}
+
+TENSOR *OnnxRPC(int socket, TENSOR * input, int reqcode, float option, int *rescode)
+{
+	TENSOR *output = NULL;
+
+	CHECK_TENSOR(input);
+
+	if (request_send(socket, reqcode, input, option) == RET_OK) {
+		output = response_recv(socket, rescode);
+	}
+
+	return output;
+}
