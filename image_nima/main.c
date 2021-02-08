@@ -19,9 +19,9 @@
 
 #define URL "ipc:///tmp/image_nima.ipc"
 
-int server(char *endpoint)
+int server(char *endpoint, int use_gpu)
 {
-	return OnnxService(endpoint, (char *)"image_nima.onnx", 0 /*use_gpu*/);
+	return OnnxService(endpoint, (char *)"image_nima.onnx", use_gpu);
 }
 
 void dump(TENSOR * recv_tensor, int rescode)
@@ -72,7 +72,7 @@ void help(char *cmd)
 	printf("Usage: %s [option]\n", cmd);
 	printf("    h, --help                   Display this help.\n");
 	printf("    e, --endpoint               Set endpoint.\n");
-	printf("    s, --server                 Start server.\n");
+	printf("    s, --server <gpu>           Start server (use gpu).\n");
 	printf("    c, --client <file>          Call service.\n");
 
 	exit(1);
@@ -81,6 +81,7 @@ void help(char *cmd)
 int main(int argc, char **argv)
 {
 	int optc;
+	int use_gpu = 0;
 	int running_server = 0;
 
 	int option_index = 0;
@@ -90,7 +91,7 @@ int main(int argc, char **argv)
 	struct option long_opts[] = {
 		{"help", 0, 0, 'h'},
 		{"endpoint", 1, 0, 'e'},
-		{"server", 0, 0, 's'},
+		{"server", 1, 0, 's'},
 		{"client", 1, 0, 'c'},
 		{0, 0, 0, 0}
 	};
@@ -98,13 +99,14 @@ int main(int argc, char **argv)
 	if (argc <= 1)
 		help(argv[0]);
 
-	while ((optc = getopt_long(argc, argv, "h e: s c:", long_opts, &option_index)) != EOF) {
+	while ((optc = getopt_long(argc, argv, "h e: s: c:", long_opts, &option_index)) != EOF) {
 		switch (optc) {
 		case 'e':
 			endpoint = optarg;
 			break;
 		case 's':
 			running_server = 1;
+			use_gpu = atoi(optarg);
 			break;
 		case 'c':				// Client
 			client_file = optarg;
@@ -117,7 +119,7 @@ int main(int argc, char **argv)
 	}
 
 	if (running_server)
-		return server(endpoint);
+		return server(endpoint, use_gpu);
 	else if (client_file) {
 		return client(endpoint, client_file);
 	}
