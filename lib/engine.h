@@ -20,7 +20,7 @@
 typedef struct {
 	DWORD magic;
 	const char *model_path;
-
+	int use_gpu;
 	OrtEnv *env;
 	OrtSession *session;
 	OrtSessionOptions *session_options;
@@ -39,7 +39,7 @@ typedef struct {
 
 void CheckStatus(OrtStatus * status);
 
-OrtValue *CreateOrtTensor(TENSOR * tensor);
+OrtValue *CreateOrtTensor(TENSOR * tensor, int gpu);
 int ValidOrtTensor(OrtValue * tensor);
 size_t OrtTensorDimensions(OrtValue * tensor, int64_t * dims);
 float *OrtTensorValues(OrtValue * tensor);

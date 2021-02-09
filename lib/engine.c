@@ -20,6 +20,7 @@
 #define ENGINE_MAGIC MAKE_FOURCC('O', 'N', 'R', 'T')
 const OrtApi *onnx_runtime_api = OrtGetApiBase()->GetApi(ORT_API_VERSION);
 
+
 void InitInputNodes(OrtEngine * t)
 {
 	size_t num_nodes;
@@ -133,6 +134,7 @@ int ValidOrtTensor(OrtValue * tensor)
 	return is_tensor;
 }
 
+#if 0
 OrtValue *CreateOrtTensor(TENSOR * tensor)
 {
 	size_t size, n_dims;
@@ -149,6 +151,40 @@ OrtValue *CreateOrtTensor(TENSOR * tensor)
 
 	OrtMemoryInfo *memory_info;
 	CheckStatus(onnx_runtime_api->CreateCpuMemoryInfo(OrtArenaAllocator, OrtMemTypeDefault, &memory_info));
+	status = onnx_runtime_api->CreateTensorWithDataAsOrtValue(memory_info,
+															  tensor->data, size * sizeof(float),
+															  dims, n_dims,
+															  ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &orttensor);
+	CheckStatus(status);
+	onnx_runtime_api->ReleaseMemoryInfo(memory_info);
+
+	ValidOrtTensor(orttensor);
+
+	return orttensor;
+}
+#endif
+
+OrtValue* CreateOrtTensor(TENSOR * tensor, int gpu)
+{
+	size_t size, n_dims;
+	int64_t dims[4];
+	OrtStatus *status;
+	OrtValue *orttensor = NULL;
+
+	n_dims = 4;
+	dims[0] = tensor->batch;
+	dims[1] = tensor->chan;
+	dims[2] = tensor->height;
+	dims[3] = tensor->width;
+	size = tensor->batch * tensor->chan * tensor->height * tensor->width;
+
+	OrtMemoryInfo *memory_info;
+	if (gpu) {
+		CheckStatus(onnx_runtime_api->CreateMemoryInfo("Cpu", OrtDeviceAllocator, 0, OrtMemTypeDefault, &memory_info));
+	} else {
+		CheckStatus(onnx_runtime_api->CreateMemoryInfo("Cuda", OrtArenaAllocator, 0, OrtMemTypeDefault, &memory_info));
+	}
+
 	status = onnx_runtime_api->CreateTensorWithDataAsOrtValue(memory_info,
 															  tensor->data, size * sizeof(float),
 															  dims, n_dims,
@@ -206,6 +242,7 @@ OrtEngine *CreateEngine(const char *model_path, int use_gpu)
 	}
 	t->magic = ENGINE_MAGIC;
 	t->model_path = model_path;
+	t->use_gpu = use_gpu;
 
 	// Building ...
 	CheckStatus(onnx_runtime_api->CreateEnv(ORT_LOGGING_LEVEL_WARNING, "OrtEngine", &(t->env)));
@@ -275,7 +312,7 @@ TENSOR *TensorForward(OrtEngine * engine, TENSOR * input)
 
 	CHECK_TENSOR(input);
 
-	input_ortvalue = CreateOrtTensor(input);
+	input_ortvalue = CreateOrtTensor(input, engine->use_gpu);
 
 	output_ortvalue = SimpleForward(engine, input_ortvalue);
 	if (ValidOrtTensor(output_ortvalue)) {

@@ -72,7 +72,7 @@ void help(char *cmd)
 	printf("Usage: %s [option]\n", cmd);
 	printf("    h, --help                   Display this help.\n");
 	printf("    e, --endpoint               Set endpoint.\n");
-	printf("    s, --server <gpu>           Start server (use gpu).\n");
+	printf("    s, --server <0 | 1>         Start server (use gpu).\n");
 	printf("    c, --client <file>          Call service.\n");
 
 	exit(1);
@@ -81,7 +81,7 @@ void help(char *cmd)
 int main(int argc, char **argv)
 {
 	int optc;
-	int use_gpu = 0;
+	int use_gpu = 1;
 	int running_server = 0;
 
 	int option_index = 0;
