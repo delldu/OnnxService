@@ -246,6 +246,7 @@ OrtEngine *CreateEngine(const char *model_path, int use_gpu)
 
 	// Building ...
 	CheckStatus(onnx_runtime_api->CreateEnv(ORT_LOGGING_LEVEL_WARNING, "OrtEngine", &(t->env)));
+	// CheckStatus(onnx_runtime_api->CreateEnv(ORT_LOGGING_LEVEL_VERBOSE, "OrtEngine", &(t->env)));
 
 	// initialize session options if needed
 	CheckStatus(onnx_runtime_api->CreateSessionOptions(&(t->session_options)));
