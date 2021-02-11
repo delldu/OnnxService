@@ -205,10 +205,12 @@ size_t OrtTensorDimensions(OrtValue * tensor, int64_t * dims)
 	CheckStatus(onnx_runtime_api->GetTensorTypeAndShape(tensor, &shape_info));
 
 	CheckStatus(onnx_runtime_api->GetDimensionsCount(shape_info, &dim_count));
-	if (dim_count != 4) {
+	if (dim_count < 1) {
 		syslog_error("Tensor must have 4 dimensions");
 		exit(-1);
 	}
+	if (dim_count > 4)
+		dim_count = 4;	// Truncate for BxCxHxW format
 
 	CheckStatus(onnx_runtime_api->GetDimensions(shape_info, dims, dim_count));
 
@@ -300,13 +302,12 @@ OrtValue *SimpleForward(OrtEngine * engine, OrtValue * input_tensor)
 	CheckStatus(status);
 
 	ValidOrtTensor(output_tensor);
-
 	return output_tensor;
 }
 
 TENSOR *TensorForward(OrtEngine * engine, TENSOR * input)
 {
-	size_t size, n_dims;
+	size_t i, size, n_dims;
 	int64_t dims[4];
 	OrtValue *input_ortvalue, *output_ortvalue;
 	TENSOR *output = NULL;
@@ -318,8 +319,15 @@ TENSOR *TensorForward(OrtEngine * engine, TENSOR * input)
 	output_ortvalue = SimpleForward(engine, input_ortvalue);
 	if (ValidOrtTensor(output_ortvalue)) {
 		n_dims = OrtTensorDimensions(output_ortvalue, dims);
-		if (n_dims == 4) {
-			output = tensor_create((WORD) dims[0], (WORD) dims[1], (WORD) dims[2], (WORD) dims[2]);
+		if (n_dims > 0) {
+			if (n_dims < 4) {
+				// Format: BxCxHxW
+				for (i = 0; i < n_dims; i++)
+					dims[3 - i] = dims[n_dims - i - 1];
+				for (i = 0; i < 4 - n_dims; i++)
+					dims[i] = 1;
+			}
+			output = tensor_create((WORD) dims[0], (WORD) dims[1], (WORD) dims[2], (WORD) dims[3]);
 			CHECK_TENSOR(output);
 			size = output->batch * output->chan * output->height * output->width;
 			memcpy(output->data, OrtTensorValues(output_ortvalue), size * sizeof(float));

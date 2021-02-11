@@ -24,37 +24,45 @@ int server(char *endpoint, int use_gpu)
 	return OnnxService(endpoint, (char *)"image_nima.onnx", use_gpu);
 }
 
-void dump(TENSOR * recv_tensor, int rescode)
+void dump(TENSOR * recv_tensor, char *filename)
 {
 	// dump scores ...
-	(void)rescode;
-
-	IMAGE *image = image_from_tensor(recv_tensor, 0);
-	if (image_valid(image)) {
-		image_save(image, "output.png");
-		image_destroy(image);
+	// IMAGE *image = image_from_tensor(recv_tensor, 0);
+	// if (image_valid(image)) {
+	// 	image_save(image, "output.png");
+	// 	image_destroy(image);
+	// }
+	int i;
+	float *f, mean;
+	f = recv_tensor->data;
+	mean = 0.0;
+	for (i = 0; i < 10; i++) {
+		mean += (*f++) * (i + 1.0);
 	}
+	printf("%6.4f %s\n", mean, filename);
 }
 
 int client(char *endpoint, char *input_file)
 {
 	int rescode, socket;
-	IMAGE *send_image;
+	IMAGE *image, *send_image;
 	TENSOR *send_tensor, *recv_tensor;
 
 	if ((socket = client_open(endpoint)) < 0)
 		return RET_ERROR;
 
-	send_image = image_load(input_file);
+	image = image_load(input_file); check_image(image);
+	send_image = image_zoom(image, 224, 224, 1); check_image(send_image);
+	image_destroy(image);
 
 	if (image_valid(send_image)) {
-		send_tensor = tensor_from_image(send_image);
+		send_tensor = tensor_from_image(send_image, 0);	// 1x3x244x244
 		check_tensor(send_tensor);
 
 		recv_tensor = OnnxRPC(socket, send_tensor, 6789, 3.14f, &rescode);
 		if (tensor_valid(recv_tensor)) {
 			// Process recv tensor ...
-			dump(recv_tensor, rescode);
+			dump(recv_tensor, input_file);
 			tensor_destroy(recv_tensor);
 		}
 
