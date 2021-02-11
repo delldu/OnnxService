@@ -42,14 +42,11 @@ void dump(TENSOR * recv_tensor, char *filename)
 	printf("%6.4f %s\n", mean, filename);
 }
 
-int client(char *endpoint, char *input_file)
+int nima(int socket, char *input_file)
 {
-	int rescode, socket;
+	int rescode;
 	IMAGE *image, *send_image;
 	TENSOR *send_tensor, *recv_tensor;
-
-	if ((socket = client_open(endpoint)) < 0)
-		return RET_ERROR;
 
 	image = image_load(input_file); check_image(image);
 	send_image = image_zoom(image, 224, 224, 1); check_image(send_image);
@@ -70,44 +67,40 @@ int client(char *endpoint, char *input_file)
 		image_destroy(send_image);
 	}
 
-	client_close(socket);
-
 	return RET_OK;
 }
 
 void help(char *cmd)
 {
-	printf("Usage: %s [option]\n", cmd);
+	printf("Usage: %s [option] <image files>\n", cmd);
 	printf("    h, --help                   Display this help.\n");
 	printf("    e, --endpoint               Set endpoint.\n");
 	printf("    s, --server <0 | 1>         Start server (use gpu).\n");
-	printf("    c, --client <file>          Call service.\n");
 
 	exit(1);
 }
 
 int main(int argc, char **argv)
 {
-	int optc;
+	int i, optc;
 	int use_gpu = 1;
 	int running_server = 0;
+	int socket;
 
 	int option_index = 0;
 	char *endpoint = (char *) URL;
-	char *client_file = NULL;
 
 	struct option long_opts[] = {
 		{"help", 0, 0, 'h'},
 		{"endpoint", 1, 0, 'e'},
 		{"server", 1, 0, 's'},
-		{"client", 1, 0, 'c'},
 		{0, 0, 0, 0}
 	};
 
 	if (argc <= 1)
 		help(argv[0]);
 
-	while ((optc = getopt_long(argc, argv, "h e: s: c:", long_opts, &option_index)) != EOF) {
+	while ((optc = getopt_long(argc, argv, "h e: s:", long_opts, &option_index)) != EOF) {
 		switch (optc) {
 		case 'e':
 			endpoint = optarg;
@@ -115,9 +108,6 @@ int main(int argc, char **argv)
 		case 's':
 			running_server = 1;
 			use_gpu = atoi(optarg);
-			break;
-		case 'c':				// Client
-			client_file = optarg;
 			break;
 		case 'h':				// help
 		default:
@@ -128,8 +118,15 @@ int main(int argc, char **argv)
 
 	if (running_server)
 		return server(endpoint, use_gpu);
-	else if (client_file) {
-		return client(endpoint, client_file);
+	else if (argc > 1) {
+		if ((socket = client_open(endpoint)) < 0)
+			return RET_ERROR;
+
+		for (i = 1; i < argc; i++)
+			nima(socket, argv[i]);
+
+		client_close(socket);
+		return RET_OK;
 	}
 
 	help(argv[0]);
