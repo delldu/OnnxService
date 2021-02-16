@@ -358,7 +358,6 @@ void DestroyEngine(OrtEngine * engine)
 
 int OnnxService(char *endpoint, char *onnx_file, int use_gpu)
 {
-	float option;
 	int socket, reqcode, count, rescode;
 	TENSOR *input_tensor, *output_tensor;
 	OrtEngine *engine;
@@ -373,13 +372,13 @@ int OnnxService(char *endpoint, char *onnx_file, int use_gpu)
 	for (;;) {
 		syslog_info("Service %d times", count);
 
-		input_tensor = request_recv(socket, &reqcode, &option);
+		input_tensor = request_recv(socket, &reqcode);
 
 		if (!tensor_valid(input_tensor)) {
 			syslog_error("Request recv bad tensor ...");
 			continue;
 		}
-		syslog_info("Request Code = %d, Option = %f", reqcode, option);
+		syslog_info("Request Code = %d", reqcode);
 
 		// Real service ...
 		time_reset();
@@ -404,13 +403,13 @@ int OnnxService(char *endpoint, char *onnx_file, int use_gpu)
 	return RET_OK;
 }
 
-TENSOR *OnnxRPC(int socket, TENSOR * input, int reqcode, float option, int *rescode)
+TENSOR *OnnxRPC(int socket, TENSOR * input, int reqcode, int *rescode)
 {
 	TENSOR *output = NULL;
 
 	CHECK_TENSOR(input);
 
-	if (request_send(socket, reqcode, input, option) == RET_OK) {
+	if (request_send(socket, reqcode, input) == RET_OK) {
 		output = response_recv(socket, rescode);
 	}
 

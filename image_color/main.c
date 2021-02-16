@@ -17,47 +17,39 @@
 
 #include "engine.h"
 
-#define IMAGE_NIMA_REQCODE 0x0103
-#define IMAGE_NIMA_URL "ipc:///tmp/image_nima.ipc"
+#define IMAGE_COLOR_REQCODE 0x0102
+#define IMAGE_COLOR_URL "ipc:///tmp/image_color.ipc"
 
 int server(char *endpoint, int use_gpu)
 {
-	return OnnxService(endpoint, (char *)"image_nima.onnx", use_gpu);
+	return OnnxService(endpoint, (char *)"image_color.onnx", use_gpu);
 }
 
 void dump(TENSOR * recv_tensor, char *filename)
 {
-	// dump scores ...
-	// IMAGE *image = image_from_tensor(recv_tensor, 0);
-	// if (image_valid(image)) {
-	// 	image_save(image, "output.png");
-	// 	image_destroy(image);
-	// }
-	int i;
-	float *f, mean;
-	f = recv_tensor->data;
-	mean = 0.0;
-	for (i = 0; i < 10; i++) {
-		mean += (*f++) * (i + 1.0);
+	char output_filename[256];
+
+	IMAGE *image = image_from_tensor(recv_tensor, 0);
+	if (image_valid(image)) {
+		snprintf(output_filename, sizeof(output_filename) - 1, "/tmp/%s", filename);
+		image_save(image, output_filename);
+		image_destroy(image);
 	}
-	printf("%6.4f %s\n", mean, filename);
 }
 
-int nima(int socket, char *input_file)
+int color(int socket, char *input_file)
 {
 	int rescode;
-	IMAGE *image, *send_image;
+	IMAGE *send_image;
 	TENSOR *send_tensor, *recv_tensor;
 
-	image = image_load(input_file); check_image(image);
-	send_image = image_zoom(image, 224, 224, 1); check_image(send_image);
-	image_destroy(image);
+	send_image = image_load(input_file); check_image(send_image);
 
 	if (image_valid(send_image)) {
-		send_tensor = tensor_from_image(send_image, 0);	// 1x3x244x244
+		send_tensor = tensor_from_image(send_image, 0);
 		check_tensor(send_tensor);
 
-		recv_tensor = OnnxRPC(socket, send_tensor, IMAGE_NIMA_REQCODE, &rescode);
+		recv_tensor = OnnxRPC(socket, send_tensor, IMAGE_COLOR_REQCODE, &rescode);
 		if (tensor_valid(recv_tensor)) {
 			// Process recv tensor ...
 			dump(recv_tensor, input_file);
@@ -89,7 +81,7 @@ int main(int argc, char **argv)
 	int socket;
 
 	int option_index = 0;
-	char *endpoint = (char *) IMAGE_NIMA_URL;
+	char *endpoint = (char *) IMAGE_COLOR_URL;
 
 	struct option long_opts[] = {
 		{"help", 0, 0, 'h'},
@@ -124,7 +116,7 @@ int main(int argc, char **argv)
 			return RET_ERROR;
 
 		for (i = 1; i < argc; i++)
-			nima(socket, argv[i]);
+			color(socket, argv[i]);
 
 		client_close(socket);
 		return RET_OK;

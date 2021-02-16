@@ -10,11 +10,10 @@
 XSUBDIRS :=  \
 	lib \
 	image_nima \
-
-# 	image_zoom \
-# 	image_patch \
-# 	image_color \
-# 	image_clean
+	image_zoom \
+	image_patch \
+	image_color \
+	image_clean
 
 
 BSUBDIRS :=

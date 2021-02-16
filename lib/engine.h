@@ -52,6 +52,6 @@ TENSOR *TensorForward(OrtEngine * engine, TENSOR * input);
 void DestroyEngine(OrtEngine * engine);
 
 int OnnxService(char *endpoint, char *onnx_file, int use_gpu);
-TENSOR *OnnxRPC(int socket, TENSOR * input, int reqcode, float option, int *rescode);
+TENSOR *OnnxRPC(int socket, TENSOR * input, int reqcode, int *rescode);
 
-#endif							// _ENGINE_H
+#endif // _ENGINE_H
