@@ -28,11 +28,6 @@ int server(char *endpoint, int use_gpu)
 void dump(TENSOR * recv_tensor, char *filename)
 {
 	// dump scores ...
-	// IMAGE *image = image_from_tensor(recv_tensor, 0);
-	// if (image_valid(image)) {
-	// 	image_save(image, "output.png");
-	// 	image_destroy(image);
-	// }
 	int i;
 	float *f, mean;
 	f = recv_tensor->data;
@@ -59,7 +54,6 @@ int nima(int socket, char *input_file)
 
 		recv_tensor = OnnxRPC(socket, send_tensor, IMAGE_NIMA_REQCODE, &rescode);
 		if (tensor_valid(recv_tensor)) {
-			// Process recv tensor ...
 			dump(recv_tensor, input_file);
 			tensor_destroy(recv_tensor);
 		}

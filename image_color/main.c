@@ -28,7 +28,6 @@ int server(char *endpoint, int use_gpu)
 void dump(TENSOR * recv_tensor, char *filename)
 {
 	char output_filename[256];
-
 	IMAGE *image = image_from_tensor(recv_tensor, 0);
 	if (image_valid(image)) {
 		snprintf(output_filename, sizeof(output_filename) - 1, "/tmp/%s", filename);
@@ -51,7 +50,6 @@ int color(int socket, char *input_file)
 
 		recv_tensor = OnnxRPC(socket, send_tensor, IMAGE_COLOR_REQCODE, &rescode);
 		if (tensor_valid(recv_tensor)) {
-			// Process recv tensor ...
 			dump(recv_tensor, input_file);
 			tensor_destroy(recv_tensor);
 		}
