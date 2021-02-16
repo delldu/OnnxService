@@ -45,7 +45,7 @@ int clean(int socket, char *input_file)
 	send_image = image_load(input_file); check_image(send_image);
 
 	if (image_valid(send_image)) {
-		send_tensor = tensor_from_image(send_image, 0);	// 1x3x244x244
+		send_tensor = tensor_from_image(send_image, 0);
 		check_tensor(send_tensor);
 
 		recv_tensor = OnnxRPC(socket, send_tensor, IMAGE_CLEAN_REQCODE, &rescode);
