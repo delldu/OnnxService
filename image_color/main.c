@@ -20,6 +20,89 @@
 #define IMAGE_COLOR_REQCODE 0x0102
 #define IMAGE_COLOR_URL "ipc:///tmp/image_color.ipc"
 
+TENSOR *color_normlab(IMAGE * image)
+{
+	int i, j;
+	TENSOR *tensor;
+	float *R, *G, *B, *A, L, a, b;
+
+	CHECK_IMAGE(image);
+
+	tensor = tensor_create(1, sizeof(RGBA_8888), image->height, image->width);
+	CHECK_TENSOR(tensor);
+
+	R = tensor->data;
+	G = R + tensor->height * tensor->width;
+	B = G + tensor->height * tensor->width;
+	A = B + tensor->height * tensor->width;
+
+	image_foreach(image, i, j) {
+		color_rgb2lab(image->ie[i][j].r, image->ie[i][j].g, image->ie[i][j].b, &L, &a, &b);
+		L = (L - 50.f)/100.f; a /= 110.f; b /= 110.f;
+		CheckPoint("L=%.4f, a = %.4f, b = %.4f, R=%d, G=%d, B = %d", 
+			L, a, b, image->ie[i][j].r, image->ie[i][j].g, image->ie[i][j].b);
+
+		*R++ = L; 
+		*G++ = 0.f; *B++ = 0.f; *A++ = -0.5f;
+		// if (image->ie[i][j].a > 0) {
+		// 	*G++ = a; *B++ = b; *A++ = 0.5f;
+		// } else {
+		// 	*G++ = 0.f; *B++ = 0.f; *A++ = -0.5f;
+		// }
+	}
+
+	return tensor;
+}
+
+int blend_fake(TENSOR *source, TENSOR *fake_ab)
+{
+	int i, j;
+	float *source_L, *source_a, *source_b, *source_m;
+	float *fake_a, *fake_b;
+	float L, a, b;
+	BYTE R, G, B;
+
+	check_tensor(source);	// 1x4xHxW
+	check_tensor(fake_ab);	// 1x2xHxW
+
+	if (source->batch != 1 || source->chan != 4 || fake_ab->batch != 1 || fake_ab->chan != 2) {
+		syslog_error("Bad source or fake_ab tensor.");
+		return RET_ERROR;
+	}
+	if (source->height != fake_ab->height || source->width != fake_ab->width) {
+		syslog_error("Source tensor size is not same as fake_ab.");
+		return RET_ERROR;
+	}
+
+	for (i = 0; i < source->height; i++) {
+		source_L = tensor_startrow(source, 0 /*batch*/, 0 /*channel*/, i);
+		source_a = tensor_startrow(source, 0 /*batch*/, 1 /*channel*/, i);
+		source_b = tensor_startrow(source, 0 /*batch*/, 2 /*channel*/, i);
+		source_m = tensor_startrow(source, 0 /*batch*/, 3 /*channel*/, i);
+
+		fake_a = tensor_startrow(fake_ab, 0 /*batch*/, 0 /*channel*/, i);
+		fake_b = tensor_startrow(fake_ab, 0 /*batch*/, 1 /*channel*/, i);
+
+		for (j = 0; j < source->width; j++) {
+			L = *source_L; a = *fake_a; b = *fake_b;
+			L = L*100.f + 50.f; a *= 110.f; b *= 110.f;
+			color_lab2rgb(L, a, b, &R, &G, &B);
+			// CheckPoint("L=%.4f, a = %.4f, b = %.4f, R=%d, G=%d, B = %d", L, a, b, R, G, B);
+
+			L = (float)R/255.f;
+			a = (float)G/255.f;
+			b = (float)B/255.f;
+
+			*source_L++ = L;
+			*source_a++ = a;
+			*source_b++ = b;
+			*source_m++ = 0.f;
+		}
+	}
+	return RET_OK;
+}
+
+
 int server(char *endpoint, int use_gpu)
 {
 	return OnnxService(endpoint, (char *)"image_color.onnx", use_gpu);
@@ -45,12 +128,13 @@ int color(int socket, char *input_file)
 	send_image = image_load(input_file); check_image(send_image);
 
 	if (image_valid(send_image)) {
-		send_tensor = tensor_from_image(send_image, 0);
+		send_tensor = color_normlab(send_image);
 		check_tensor(send_tensor);
 
 		recv_tensor = OnnxRPC(socket, send_tensor, IMAGE_COLOR_REQCODE, &rescode);
 		if (tensor_valid(recv_tensor)) {
-			dump(recv_tensor, input_file);
+			blend_fake(send_tensor, recv_tensor);
+			dump(send_tensor, input_file);
 			tensor_destroy(recv_tensor);
 		}
 
