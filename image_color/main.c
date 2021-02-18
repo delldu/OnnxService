@@ -18,7 +18,8 @@
 #include "engine.h"
 
 #define IMAGE_COLOR_REQCODE 0x0102
-#define IMAGE_COLOR_URL "ipc:///tmp/image_color.ipc"
+// #define IMAGE_COLOR_URL "ipc:///tmp/image_color.ipc"
+#define IMAGE_COLOR_URL "tcp://127.0.0.1:9102"
 
 TENSOR *color_normlab(IMAGE * image)
 {
@@ -39,16 +40,7 @@ TENSOR *color_normlab(IMAGE * image)
 	image_foreach(image, i, j) {
 		color_rgb2lab(image->ie[i][j].r, image->ie[i][j].g, image->ie[i][j].b, &L, &a, &b);
 		L = (L - 50.f)/100.f; a /= 110.f; b /= 110.f;
-		CheckPoint("L=%.4f, a = %.4f, b = %.4f, R=%d, G=%d, B = %d", 
-			L, a, b, image->ie[i][j].r, image->ie[i][j].g, image->ie[i][j].b);
-
-		*R++ = L; 
-		*G++ = 0.f; *B++ = 0.f; *A++ = -0.5f;
-		// if (image->ie[i][j].a > 0) {
-		// 	*G++ = a; *B++ = b; *A++ = 0.5f;
-		// } else {
-		// 	*G++ = 0.f; *B++ = 0.f; *A++ = -0.5f;
-		// }
+		*R++ = L; *G++ = a; *B++ = b; *A++ = 0.f;
 	}
 
 	return tensor;
@@ -57,7 +49,7 @@ TENSOR *color_normlab(IMAGE * image)
 int blend_fake(TENSOR *source, TENSOR *fake_ab)
 {
 	int i, j;
-	float *source_L, *source_a, *source_b, *source_m;
+	float *source_L, *source_a, *source_b;
 	float *fake_a, *fake_b;
 	float L, a, b;
 	BYTE R, G, B;
@@ -78,7 +70,6 @@ int blend_fake(TENSOR *source, TENSOR *fake_ab)
 		source_L = tensor_startrow(source, 0 /*batch*/, 0 /*channel*/, i);
 		source_a = tensor_startrow(source, 0 /*batch*/, 1 /*channel*/, i);
 		source_b = tensor_startrow(source, 0 /*batch*/, 2 /*channel*/, i);
-		source_m = tensor_startrow(source, 0 /*batch*/, 3 /*channel*/, i);
 
 		fake_a = tensor_startrow(fake_ab, 0 /*batch*/, 0 /*channel*/, i);
 		fake_b = tensor_startrow(fake_ab, 0 /*batch*/, 1 /*channel*/, i);
@@ -87,7 +78,6 @@ int blend_fake(TENSOR *source, TENSOR *fake_ab)
 			L = *source_L; a = *fake_a; b = *fake_b;
 			L = L*100.f + 50.f; a *= 110.f; b *= 110.f;
 			color_lab2rgb(L, a, b, &R, &G, &B);
-			// CheckPoint("L=%.4f, a = %.4f, b = %.4f, R=%d, G=%d, B = %d", L, a, b, R, G, B);
 
 			L = (float)R/255.f;
 			a = (float)G/255.f;
@@ -96,7 +86,6 @@ int blend_fake(TENSOR *source, TENSOR *fake_ab)
 			*source_L++ = L;
 			*source_a++ = a;
 			*source_b++ = b;
-			*source_m++ = 0.f;
 		}
 	}
 	return RET_OK;
@@ -126,6 +115,7 @@ int color(int socket, char *input_file)
 	TENSOR *send_tensor, *recv_tensor;
 
 	send_image = image_load(input_file); check_image(send_image);
+	// color_togray(send_image);
 
 	if (image_valid(send_image)) {
 		send_tensor = color_normlab(send_image);
