@@ -24,24 +24,17 @@
 TENSOR *color_normlab(IMAGE * image)
 {
 	int i, j;
+	float *A;
 	TENSOR *tensor;
-	float *R, *G, *B, *A, L, a, b;
 
 	CHECK_IMAGE(image);
 
-	tensor = tensor_create(1, sizeof(RGBA_8888), image->height, image->width);
+	tensor = tensor_rgb2lab(image);
 	CHECK_TENSOR(tensor);
 
-	R = tensor->data;
-	G = R + tensor->height * tensor->width;
-	B = G + tensor->height * tensor->width;
-	A = B + tensor->height * tensor->width;
-
-	image_foreach(image, i, j) {
-		color_rgb2lab(image->ie[i][j].r, image->ie[i][j].g, image->ie[i][j].b, &L, &a, &b);
-		L = (L - 50.f)/100.f; a /= 110.f; b /= 110.f;
-		*R++ = L; *G++ = a; *B++ = b; *A++ = 0.f;
-	}
+	A = tensor_start_row(tensor, 0 /*batch */, 3 /*channel */, 0);
+	image_foreach(image, i, j)
+		*A++ = 0.f;
 
 	return tensor;
 }
@@ -67,12 +60,12 @@ int blend_fake(TENSOR *source, TENSOR *fake_ab)
 	}
 
 	for (i = 0; i < source->height; i++) {
-		source_L = tensor_startrow(source, 0 /*batch*/, 0 /*channel*/, i);
-		source_a = tensor_startrow(source, 0 /*batch*/, 1 /*channel*/, i);
-		source_b = tensor_startrow(source, 0 /*batch*/, 2 /*channel*/, i);
+		source_L = tensor_start_row(source, 0 /*batch*/, 0 /*channel*/, i);
+		source_a = tensor_start_row(source, 0 /*batch*/, 1 /*channel*/, i);
+		source_b = tensor_start_row(source, 0 /*batch*/, 2 /*channel*/, i);
 
-		fake_a = tensor_startrow(fake_ab, 0 /*batch*/, 0 /*channel*/, i);
-		fake_b = tensor_startrow(fake_ab, 0 /*batch*/, 1 /*channel*/, i);
+		fake_a = tensor_start_row(fake_ab, 0 /*batch*/, 0 /*channel*/, i);
+		fake_b = tensor_start_row(fake_ab, 0 /*batch*/, 1 /*channel*/, i);
 
 		for (j = 0; j < source->width; j++) {
 			L = *source_L; a = *fake_a; b = *fake_b;
@@ -90,7 +83,6 @@ int blend_fake(TENSOR *source, TENSOR *fake_ab)
 	}
 	return RET_OK;
 }
-
 
 int server(char *endpoint, int use_gpu)
 {
@@ -115,7 +107,7 @@ int color(int socket, char *input_file)
 	TENSOR *send_tensor, *recv_tensor;
 
 	send_image = image_load(input_file); check_image(send_image);
-	// color_togray(send_image);
+	color_togray(send_image);
 
 	if (image_valid(send_image)) {
 		send_tensor = color_normlab(send_image);
