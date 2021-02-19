@@ -21,6 +21,30 @@
 // #define IMAGE_COLOR_URL "ipc:///tmp/image_color.ipc"
 #define IMAGE_COLOR_URL "tcp://127.0.0.1:9102"
 
+TENSOR *resize_onnxrpc(int socket, TENSOR *send_tensor)
+{
+	int nh, nw, rescode;
+	TENSOR *resize_send, *resize_recv, *recv_tensor;
+
+	CHECK_TENSOR(send_tensor);
+
+	// Color server limited: max 512, only accept 8 times !!!
+	resize(send_tensor->height, send_tensor->width, 512, 8, &nh, &nw);
+	if (send_tensor->height == nh && send_tensor->width == nw) {
+		// Normal onnx RPC
+		recv_tensor = OnnxRPC(socket, send_tensor, IMAGE_COLOR_REQCODE, &rescode);
+	} else {
+		resize_send = tensor_zoom(send_tensor, nh, nw); CHECK_TENSOR(resize_send);
+		resize_recv = OnnxRPC(socket, resize_send, IMAGE_COLOR_REQCODE, &rescode);
+		recv_tensor = tensor_zoom(resize_recv, send_tensor->height, send_tensor->width);
+		tensor_destroy(resize_recv);
+		tensor_destroy(resize_send);
+	}
+
+	return recv_tensor;
+}
+
+
 TENSOR *color_normlab(IMAGE * image)
 {
 	int i, j;
@@ -29,8 +53,7 @@ TENSOR *color_normlab(IMAGE * image)
 
 	CHECK_IMAGE(image);
 
-	tensor = tensor_rgb2lab(image);
-	CHECK_TENSOR(tensor);
+	tensor = tensor_rgb2lab(image); CHECK_TENSOR(tensor);
 
 	A = tensor_start_row(tensor, 0 /*batch */, 3 /*channel */, 0);
 	image_foreach(image, i, j)
@@ -102,7 +125,6 @@ void dump(TENSOR * recv_tensor, char *filename)
 
 int color(int socket, char *input_file)
 {
-	int rescode;
 	IMAGE *send_image;
 	TENSOR *send_tensor, *recv_tensor;
 
@@ -113,7 +135,7 @@ int color(int socket, char *input_file)
 		send_tensor = color_normlab(send_image);
 		check_tensor(send_tensor);
 
-		recv_tensor = OnnxRPC(socket, send_tensor, IMAGE_COLOR_REQCODE, &rescode);
+		recv_tensor = resize_onnxrpc(socket, send_tensor);
 		if (tensor_valid(recv_tensor)) {
 			blend_fake(send_tensor, recv_tensor);
 			dump(send_tensor, input_file);
