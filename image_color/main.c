@@ -29,8 +29,7 @@ TENSOR *resize_onnxrpc(int socket, TENSOR *send_tensor)
 	CHECK_TENSOR(send_tensor);
 
 	// Color server limited: max 512, only accept 8 times !!!
-	// resize(send_tensor->height, send_tensor->width, 512, 8, &nh, &nw);
-	nh = nw = 512;
+	resize(send_tensor->height, send_tensor->width, 512, 8, &nh, &nw);
 	if (send_tensor->height == nh && send_tensor->width == nw) {
 		// Normal onnx RPC
 		recv_tensor = OnnxRPC(socket, send_tensor, IMAGE_COLOR_REQCODE, &rescode);

@@ -110,7 +110,7 @@ void InitOutputNodes(OrtEngine * t)
 
 		onnx_runtime_api->ReleaseTypeInfo(typeinfo);
 	}
-	// onnx_runtime_api->ReleaseAllocator(allocator); segmant fault !!!
+	// onnx_runtime_api->ReleaseAllocator(allocator); segment fault !!!
 }
 
 void CheckStatus(OrtStatus * status)
@@ -133,36 +133,6 @@ int ValidOrtTensor(OrtValue * tensor)
 	}
 	return is_tensor;
 }
-
-#if 0
-OrtValue *CreateOrtTensor(TENSOR * tensor)
-{
-	size_t size, n_dims;
-	int64_t dims[4];
-	OrtStatus *status;
-	OrtValue *orttensor = NULL;
-
-	n_dims = 4;
-	dims[0] = tensor->batch;
-	dims[1] = tensor->chan;
-	dims[2] = tensor->height;
-	dims[3] = tensor->width;
-	size = tensor->batch * tensor->chan * tensor->height * tensor->width;
-
-	OrtMemoryInfo *memory_info;
-	CheckStatus(onnx_runtime_api->CreateCpuMemoryInfo(OrtArenaAllocator, OrtMemTypeDefault, &memory_info));
-	status = onnx_runtime_api->CreateTensorWithDataAsOrtValue(memory_info,
-															  tensor->data, size * sizeof(float),
-															  dims, n_dims,
-															  ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &orttensor);
-	CheckStatus(status);
-	onnx_runtime_api->ReleaseMemoryInfo(memory_info);
-
-	ValidOrtTensor(orttensor);
-
-	return orttensor;
-}
-#endif
 
 OrtValue* CreateOrtTensor(TENSOR * tensor, int gpu)
 {
@@ -260,6 +230,7 @@ OrtEngine *CreateEngine(const char *model_path, int use_gpu)
 
 	// Optionally add more execution providers via session_options
 	// E.g. for CUDA include cuda_provider_factory.h and uncomment the following line:
+	
 	if (use_gpu)
 		CheckStatus(OrtSessionOptionsAppendExecutionProvider_CUDA(t->session_options, 0));
 
