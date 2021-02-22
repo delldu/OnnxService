@@ -29,7 +29,8 @@ TENSOR *resize_onnxrpc(int socket, TENSOR *send_tensor)
 	CHECK_TENSOR(send_tensor);
 
 	// Color server limited: max 512, only accept 8 times !!!
-	resize(send_tensor->height, send_tensor->width, 512, 8, &nh, &nw);
+	// resize(send_tensor->height, send_tensor->width, 512, 8, &nh, &nw);
+	nh = nw = 512;
 	if (send_tensor->height == nh && send_tensor->width == nw) {
 		// Normal onnx RPC
 		recv_tensor = OnnxRPC(socket, send_tensor, IMAGE_COLOR_REQCODE, &rescode);
@@ -47,17 +48,11 @@ TENSOR *resize_onnxrpc(int socket, TENSOR *send_tensor)
 
 TENSOR *color_normlab(IMAGE * image)
 {
-	int i, j;
-	float *A;
 	TENSOR *tensor;
 
 	CHECK_IMAGE(image);
-
 	tensor = tensor_rgb2lab(image); CHECK_TENSOR(tensor);
-
-	A = tensor_start_row(tensor, 0 /*batch */, 3 /*channel */, 0);
-	image_foreach(image, i, j)
-		*A++ = 0.f;
+	tensor_setmask(tensor, 1.0);
 
 	return tensor;
 }
@@ -65,10 +60,8 @@ TENSOR *color_normlab(IMAGE * image)
 int blend_fake(TENSOR *source, TENSOR *fake_ab)
 {
 	int i, j;
-	float *source_L, *source_a, *source_b;
+	float *source_a, *source_b;
 	float *fake_a, *fake_b;
-	float L, a, b;
-	BYTE R, G, B;
 
 	check_tensor(source);	// 1x4xHxW
 	check_tensor(fake_ab);	// 1x2xHxW
@@ -82,26 +75,16 @@ int blend_fake(TENSOR *source, TENSOR *fake_ab)
 		return RET_ERROR;
 	}
 
+	source_a = tensor_start_chan(source, 0 /*batch*/, 1 /*channel*/);
+	source_b = tensor_start_chan(source, 0 /*batch*/, 2 /*channel*/);
+
+	fake_a = tensor_start_chan(fake_ab, 0 /*batch*/, 0 /*channel*/);
+	fake_b = tensor_start_chan(fake_ab, 0 /*batch*/, 1 /*channel*/);
+
 	for (i = 0; i < source->height; i++) {
-		source_L = tensor_start_row(source, 0 /*batch*/, 0 /*channel*/, i);
-		source_a = tensor_start_row(source, 0 /*batch*/, 1 /*channel*/, i);
-		source_b = tensor_start_row(source, 0 /*batch*/, 2 /*channel*/, i);
-
-		fake_a = tensor_start_row(fake_ab, 0 /*batch*/, 0 /*channel*/, i);
-		fake_b = tensor_start_row(fake_ab, 0 /*batch*/, 1 /*channel*/, i);
-
 		for (j = 0; j < source->width; j++) {
-			L = *source_L; a = *fake_a; b = *fake_b;
-			L = L*100.f + 50.f; a *= 110.f; b *= 110.f;
-			color_lab2rgb(L, a, b, &R, &G, &B);
-
-			L = (float)R/255.f;
-			a = (float)G/255.f;
-			b = (float)B/255.f;
-
-			*source_L++ = L;
-			*source_a++ = a;
-			*source_b++ = b;
+			*source_a++ = *fake_a++;
+			*source_b++ = *fake_b++;
 		}
 	}
 	return RET_OK;
@@ -114,10 +97,14 @@ int server(char *endpoint, int use_gpu)
 
 void dump(TENSOR * recv_tensor, char *filename)
 {
-	char output_filename[256];
-	IMAGE *image = image_from_tensor(recv_tensor, 0);
+	char output_filename[256], *p;
+
+	IMAGE *image = tensor_lab2rgb(recv_tensor, 0);
+
 	if (image_valid(image)) {
-		snprintf(output_filename, sizeof(output_filename) - 1, "/tmp/%s", filename);
+		p = strrchr(filename, '/');
+	 	p = (! p)? filename : p + 1;
+		snprintf(output_filename, sizeof(output_filename) - 1, "/tmp/%s", p);
 		image_save(image, output_filename);
 		image_destroy(image);
 	}
@@ -128,8 +115,10 @@ int color(int socket, char *input_file)
 	IMAGE *send_image;
 	TENSOR *send_tensor, *recv_tensor;
 
+	printf("Coloring %s ...\n", input_file);
+
 	send_image = image_load(input_file); check_image(send_image);
-	color_togray(send_image);
+	// color_togray(send_image);
 
 	if (image_valid(send_image)) {
 		send_tensor = color_normlab(send_image);
