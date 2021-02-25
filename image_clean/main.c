@@ -18,27 +18,42 @@
 #include "engine.h"
 
 #define IMAGE_CLEAN_REQCODE 0x0101
-#define IMAGE_CLEAN_URL "ipc:///tmp/image_clean.ipc"
+// #define IMAGE_CLEAN_URL "ipc:///tmp/image_clean.ipc"
+#define IMAGE_CLEAN_URL "tcp://127.0.0.1:9101"
+
+TENSOR *clean_onnxrpc(int socket, TENSOR *send_tensor)
+{
+	int nh, nw, rescode;
+	TENSOR *resize_send, *resize_recv, *recv_tensor;
+
+	CHECK_TENSOR(send_tensor);
+
+	// Clean server limited: only accept 4 times tensor !!!
+	nh = (send_tensor->height + 3)/4; nh *= 4;
+	nw = (send_tensor->width + 3)/4; nw *= 4;
+
+	if (send_tensor->height == nh && send_tensor->width == nw) {
+		// Normal onnx RPC
+		recv_tensor = OnnxRPC(socket, send_tensor, IMAGE_CLEAN_REQCODE, &rescode);
+	} else {
+		resize_send = tensor_zoom(send_tensor, nh, nw); CHECK_TENSOR(resize_send);
+		resize_recv = OnnxRPC(socket, resize_send, IMAGE_CLEAN_REQCODE, &rescode);
+		recv_tensor = tensor_zoom(resize_recv, send_tensor->height, send_tensor->width);
+		tensor_destroy(resize_recv);
+		tensor_destroy(resize_send);
+	}
+
+	return recv_tensor;
+}
+
 
 int server(char *endpoint, int use_gpu)
 {
 	return OnnxService(endpoint, (char *)"image_clean.onnx", use_gpu);
 }
 
-void dump(TENSOR * recv_tensor, char *filename)
-{
-	char output_filename[256];
-	IMAGE *image = image_from_tensor(recv_tensor, 0);
-	if (image_valid(image)) {
-		snprintf(output_filename, sizeof(output_filename) - 1, "/tmp/%s", filename);
-		image_save(image, output_filename);
-		image_destroy(image);
-	}
-}
-
 int clean(int socket, char *input_file)
 {
-	int rescode;
 	IMAGE *send_image;
 	TENSOR *send_tensor, *recv_tensor;
 
@@ -48,9 +63,9 @@ int clean(int socket, char *input_file)
 		send_tensor = tensor_from_image(send_image, 0);
 		check_tensor(send_tensor);
 
-		recv_tensor = OnnxRPC(socket, send_tensor, IMAGE_CLEAN_REQCODE, &rescode);
+		recv_tensor = clean_onnxrpc(socket, send_tensor);
 		if (tensor_valid(recv_tensor)) {
-			dump(recv_tensor, input_file);
+			SaveTensorAsImage(recv_tensor, input_file);
 			tensor_destroy(recv_tensor);
 		}
 

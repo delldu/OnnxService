@@ -12,6 +12,10 @@
 #include <assert.h>
 #include "engine.h"
 
+// For mkdir
+#include <sys/types.h>
+#include <sys/stat.h> 
+
 // opt/onnxruntime-linux-x64-gpu-1.6.0/include/cuda_provider_factory.h
 #include <cuda_provider_factory.h>
 
@@ -385,4 +389,20 @@ TENSOR *OnnxRPC(int socket, TENSOR * input, int reqcode, int *rescode)
 	}
 
 	return output;
+}
+
+void SaveTensorAsImage(TENSOR *tensor, char *filename)
+{
+	char output_filename[256], *p;
+	IMAGE *image = image_from_tensor(tensor, 0);
+
+	mkdir("output", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH); 
+
+	if (image_valid(image)) {
+		p = strrchr(filename, '/');
+	 	p = (! p)? filename : p + 1;
+		snprintf(output_filename, sizeof(output_filename) - 1, "output/%s", p);
+		image_save(image, output_filename);
+		image_destroy(image);
+	}
 }

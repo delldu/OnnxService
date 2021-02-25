@@ -54,4 +54,7 @@ void DestroyEngine(OrtEngine * engine);
 int OnnxService(char *endpoint, char *onnx_file, int use_gpu);
 TENSOR *OnnxRPC(int socket, TENSOR * input, int reqcode, int *rescode);
 
+void SaveTensorAsImage(TENSOR *tensor, char *filename);
+
+
 #endif // _ENGINE_H
