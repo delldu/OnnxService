@@ -46,7 +46,6 @@ TENSOR *clean_onnxrpc(int socket, TENSOR *send_tensor)
 	return recv_tensor;
 }
 
-
 int server(char *endpoint, int use_gpu)
 {
 	return OnnxService(endpoint, (char *)"image_clean.onnx", use_gpu);
@@ -56,6 +55,8 @@ int clean(int socket, char *input_file)
 {
 	IMAGE *send_image;
 	TENSOR *send_tensor, *recv_tensor;
+
+	printf("Cleaning %s ...\n", input_file);
 
 	send_image = image_load(input_file); check_image(send_image);
 

@@ -21,7 +21,7 @@
 // #define IMAGE_COLOR_URL "ipc:///tmp/image_color.ipc"
 #define IMAGE_COLOR_URL "tcp://127.0.0.1:9102"
 
-TENSOR *resize_onnxrpc(int socket, TENSOR *send_tensor)
+TENSOR *color_onnxrpc(int socket, TENSOR *send_tensor)
 {
 	int nh, nw, rescode;
 	TENSOR *resize_send, *resize_recv, *recv_tensor;
@@ -43,7 +43,6 @@ TENSOR *resize_onnxrpc(int socket, TENSOR *send_tensor)
 
 	return recv_tensor;
 }
-
 
 TENSOR *color_normlab(IMAGE * image)
 {
@@ -123,7 +122,7 @@ int color(int socket, char *input_file)
 		send_tensor = color_normlab(send_image);
 		check_tensor(send_tensor);
 
-		recv_tensor = resize_onnxrpc(socket, send_tensor);
+		recv_tensor = color_onnxrpc(socket, send_tensor);
 		if (tensor_valid(recv_tensor)) {
 			blend_fake(send_tensor, recv_tensor);
 			dump(send_tensor, input_file);

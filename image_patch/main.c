@@ -32,6 +32,8 @@ int patch(int socket, char *input_file)
 	IMAGE *send_image;
 	TENSOR *send_tensor, *recv_tensor;
 
+	printf("Patching %s ...\n", input_file);
+
 	send_image = image_load(input_file); check_image(send_image);
 
 	if (image_valid(send_image)) {
