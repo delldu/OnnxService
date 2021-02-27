@@ -13,7 +13,9 @@ XSUBDIRS :=  \
 	image_zoom \
 	image_patch \
 	image_color \
-	image_clean
+	image_clean \
+	image_light \
+	image_matting
 
 
 BSUBDIRS :=
