@@ -21,6 +21,81 @@
 // #define IMAGE_MATTING_URL "ipc:///tmp/image_matting.ipc"
 #define IMAGE_MATTING_URL "tcp://127.0.0.1:9107"
 
+int normal_input(TENSOR *tensor)
+{
+	int i, j;
+	float *tensor_R, *tensor_G, *tensor_B, d;
+
+	check_tensor(tensor);
+
+	// Normal ...
+	tensor_R = tensor_start_chan(tensor, 0 /*batch*/, 0 /*channel */);
+	tensor_G = tensor_start_chan(tensor, 0 /*batch*/, 1 /*channel */);
+	tensor_B = tensor_start_chan(tensor, 0 /*batch*/, 2 /*channel */);
+	for (i = 0; i < tensor->height; i++) {
+		for (j = 0; j < tensor->width; j++) {
+			*tensor_R = (*tensor_R - 0.485f)/0.229f;
+			*tensor_G = (*tensor_G - 0.456f)/0.224f;
+			*tensor_B = (*tensor_B - 0.406f)/0.225f;
+
+			tensor_R++; tensor_G++; tensor_B++;
+		}
+	}
+
+	// Change RGB To BGR
+	tensor_R = tensor_start_chan(tensor, 0 /*batch*/, 0 /*channel */);
+	tensor_B = tensor_start_chan(tensor, 0 /*batch*/, 2 /*channel */);
+	for (i = 0; i < tensor->height; i++) {
+		for (j = 0; j < tensor->width; j++) {
+			d = *tensor_B;
+			*tensor_B = *tensor_R;
+			*tensor_R = d;
+			tensor_R++; tensor_B++;
+		}
+	}
+
+	return RET_OK;
+}
+
+int normal_output(TENSOR *tensor)
+{
+	int i, size;
+	float *data, min, max, d;
+
+	check_tensor(tensor);
+
+    // ma = torch.max(d)
+    // mi = torch.min(d)
+    // dn = (d-mi)/(ma-mi)
+	// return dn
+	size = tensor->chan * tensor->height * tensor->width;
+	data = tensor->data;
+	min = max = *data++;
+	for (i = 1; i < size; i++, data++) {
+		if (*data > max)
+			max = *data;
+		if (*data < min)
+			min = *data;
+	}
+
+	data = tensor->data;
+	max = max - min;
+	if (max > 1e-3) {
+		for (i = 0; i < size; i++, data++) {
+			d = *data - min;
+			d /= max;
+			if (d < 0.f)
+				d = 0.f;
+			if (d > 1.f)
+				d = 1.f;
+			*data = d;
+		}
+	}
+
+	return RET_OK;
+}
+
+
 TENSOR *matting_onnxrpc(int socket, TENSOR *send_tensor)
 {
 	int nh, nw, rescode;
@@ -28,16 +103,23 @@ TENSOR *matting_onnxrpc(int socket, TENSOR *send_tensor)
 
 	CHECK_TENSOR(send_tensor);
 
-	// Matting server limited: only accept 4 times tensor !!!
+	resize_send = resize_recv = recv_tensor = NULL;	// avoid compile complaint
+
+	// Matting server limited: only accept 320x320 !!!
 	nh = 320;
 	nw = 320;
-
 	if (send_tensor->height == nh && send_tensor->width == nw) {
 		// Normal onnx RPC
+		normal_input(send_tensor);
 		recv_tensor = OnnxRPC(socket, send_tensor, IMAGE_MATTING_REQCODE, &rescode);
+		normal_output(recv_tensor);
 	} else {
 		resize_send = tensor_zoom(send_tensor, nh, nw); CHECK_TENSOR(resize_send);
+
+		normal_input(resize_send);
 		resize_recv = OnnxRPC(socket, resize_send, IMAGE_MATTING_REQCODE, &rescode);
+		normal_output(resize_recv);
+
 		recv_tensor = tensor_zoom(resize_recv, send_tensor->height, send_tensor->width);
 		tensor_destroy(resize_recv);
 		tensor_destroy(resize_send);
@@ -50,6 +132,32 @@ int server(char *endpoint, int use_gpu)
 {
 	return OnnxService(endpoint, (char *)"image_matting.onnx", use_gpu);
 }
+
+int blend_mask(IMAGE *source_image, TENSOR *mask_tensor)
+{
+	int i, j;
+	float *mask_A;
+
+	check_image(source_image);
+	check_tensor(mask_tensor);
+
+	mask_A = tensor_start_chan(mask_tensor, 0 /* batch */, 0 /* channel */);
+	image_foreach(source_image, i, j) {
+		if (*mask_A < 0.50) {
+			// Green screen
+			source_image->ie[i][j].r = 0;
+			source_image->ie[i][j].g = 255;
+			source_image->ie[i][j].b = 0;
+			source_image->ie[i][j].a = 0;
+		} else {
+			source_image->ie[i][j].a = 255;
+		}
+		mask_A++;
+	}
+
+	return RET_OK;
+}
+
 
 int matting(int socket, char *input_file)
 {
@@ -66,7 +174,8 @@ int matting(int socket, char *input_file)
 
 		recv_tensor = matting_onnxrpc(socket, send_tensor);
 		if (tensor_valid(recv_tensor)) {
-			SaveTensorAsImage(recv_tensor, input_file);
+			blend_mask(send_image, recv_tensor);
+			SaveOutputImage(send_image, input_file);
 			tensor_destroy(recv_tensor);
 		}
 
