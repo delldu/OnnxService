@@ -391,10 +391,9 @@ TENSOR *OnnxRPC(int socket, TENSOR * input, int reqcode, int *rescode)
 	return output;
 }
 
-void SaveTensorAsImage(TENSOR *tensor, char *filename)
+void SaveOutputImage(IMAGE *image, char *filename)
 {
 	char output_filename[256], *p;
-	IMAGE *image = image_from_tensor(tensor, 0);
 
 	mkdir("output", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH); 
 
@@ -403,6 +402,15 @@ void SaveTensorAsImage(TENSOR *tensor, char *filename)
 	 	p = (! p)? filename : p + 1;
 		snprintf(output_filename, sizeof(output_filename) - 1, "output/%s", p);
 		image_save(image, output_filename);
+	}
+}
+
+void SaveTensorAsImage(TENSOR *tensor, char *filename)
+{
+	IMAGE *image = image_from_tensor(tensor, 0);
+
+	if (image_valid(image)) {
+		SaveOutputImage(image, filename);
 		image_destroy(image);
 	}
 }

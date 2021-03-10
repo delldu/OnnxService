@@ -15,7 +15,8 @@ XSUBDIRS :=  \
 	image_color \
 	image_clean \
 	image_light \
-	image_matting
+	image_matting \
+	image_facegan
 
 
 BSUBDIRS :=
