@@ -12,6 +12,7 @@ ONNXRUNTIME_INSTALL_DIR := /opt/onnxruntime
 TARGET := image_facegan
 
 SOURCE :=  \
+	cmaes.c \
 	main.c \
 
 INCS	:= -I../lib -I$(ONNXRUNTIME_INSTALL_DIR)/include $(shell nimagetool --cflags)
