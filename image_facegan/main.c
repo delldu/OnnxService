@@ -35,14 +35,27 @@ int sample_t(double *x, int n)
 	float *f;
 	TENSOR *zcode_tensor, *wcode_tensor;
 
+	CheckEngine(transformer_engine);
+
+	// Create zcode tensor
 	zcode_tensor = tensor_create(1, 1, 1, W_SPACE_DIM);
+	if (! tensor_valid(zcode_tensor)) {
+		syslog_error("Create zcode tensor.");
+	}
+	f = zcode_tensor->data;
+	for (i = 0; i < n; i++)
+		*f++ = (float)x[i];
 
+	// Compute wcode
 	wcode_tensor = TensorForward(transformer_engine, zcode_tensor);
+	if (! tensor_valid(wcode_tensor)) {
+		syslog_error("Compute wcode from zcode.");
+	}
 
-	// Update x
+	// Save wcode to x
 	f = wcode_tensor->data;
 	for (i = 0; i < n; i++)
-		*x++ = (double)*f++;
+		x[i] = (double)*f++;
 
 	tensor_destroy(wcode_tensor);
 	tensor_destroy(zcode_tensor);
@@ -57,18 +70,28 @@ double fitfun(double const *x, unsigned long N)
 	float *f1, *f2;
 	TENSOR *wcode_tensor, *output_image_tensor, *output_tensor;
 
+	CheckEngine(decoder_engine);
+
 	// Create wcode tensor
 	wcode_tensor = tensor_create(1, 1, 1, W_SPACE_DIM);
+	if (! tensor_valid(wcode_tensor)) {
+		syslog_error("Create wcode tensor");
+	}
 	f1 = wcode_tensor->data;
-	for (i = 0; i < W_SPACE_DIM; i++) {
-		*f1 = (float)(*x);
-		f1++; x++;
+	for (i = 0; i < W_SPACE_DIM; i++)
+		*f1++ = (float)x[i];
+
+	// Generator image from wcode
+	output_image_tensor = TensorForward(decoder_engine, wcode_tensor);
+	if (! tensor_valid(output_image_tensor)) {
+		syslog_error("Generate image.");
+	}
+	output_tensor = tensor_zoom(output_image_tensor, 256, 256);
+	if (! tensor_valid(output_tensor)) {
+		syslog_error("Zoom image tensor to (256x256)");
 	}
 
-	output_image_tensor = TensorForward(decoder_engine, wcode_tensor);
-	output_tensor = tensor_zoom(output_image_tensor, 256, 256);
-
-	// Compute loss
+	// Compute loss, maybe we need more complex method !!!
 	sum = 0;
 	f1 = stand_tensor->data;
 	f2 = output_tensor->data;
@@ -133,9 +156,25 @@ double *cmaes_search(int epochs)
 
 TENSOR *wcode_search(TENSOR *reference_tensor)
 {
+	int i;
+	double *best;
+	TENSOR *wcode_tensor;
+
 	CHECK_TENSOR(reference_tensor);
 
-	return NULL;
+	wcode_tensor = tensor_create(1, 1, 1, W_SPACE_DIM);
+	CHECK_TENSOR(wcode_tensor);
+
+	stand_tensor = reference_tensor;
+	best = cmaes_search(300);
+
+	// Save best to wcode
+	for (i = 0; i < W_SPACE_DIM; i++)
+		wcode_tensor->data[i] = (float)best[i];
+
+	free(best);
+
+	return wcode_tensor;
 }
 
 int FaceGanService(char *endpoint, int use_gpu)

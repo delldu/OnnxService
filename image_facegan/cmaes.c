@@ -606,10 +606,8 @@ double *const *cmaes_SamplePopulation(cmaes_t * t, SampleTransformer st)
 	double const *xmean = t->rgxmean;
 	double samples[1024];
 
-	if ((int)sizeof(samples) < N) {
-		fprintf(stderr, "Design error: samples size is less N");
-		exit(0);
-	}
+	if ((int)sizeof(samples) < N)
+		FATAL("Design error: samples size is less N", NULL, NULL, NULL);
 
 	/* cmaes_SetMean(t, xmean); * xmean could be changed at this point */
 
