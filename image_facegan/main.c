@@ -105,7 +105,7 @@ double fitfun(double const *x, unsigned long N)
 	tensor_destroy(output_tensor);
 	tensor_destroy(wcode_tensor);
 
-	return sum;
+	return sum/N;
 }
 
 double *cmaes_search(int epochs)
@@ -119,13 +119,13 @@ double *cmaes_search(int epochs)
 
 	evo.sp.stopMaxIter = epochs;	// stop after given number of iterations (generations)
 	evo.sp.stopFitness.flg = 1;
-	evo.sp.stopFitness.val = 1e-3;	// stop if function value is smaller than stopFitness
+	evo.sp.stopFitness.val = 1e-2;	// stop if function value is smaller than stopFitness
 	evo.sp.stopTolFun = 1e-4;		// stop if function value differences are small
 	cost_values =  cmaes_init_final(&evo);
 
 
 	dimension = (unsigned int) cmaes_Get(&evo, "dimension");
-	printf("%s\n", cmaes_SayHello(&evo));
+	syslog_info("%s", cmaes_SayHello(&evo));
 
 	while (!cmaes_TestForTermination(&evo)) {
 		/* generate lambda new search points, sample population */
@@ -137,12 +137,15 @@ double *cmaes_search(int epochs)
 
 		cmaes_UpdateDistribution(&evo, cost_values);	/* assumes that pop[i] has not been modified */
 
-		if ((int)evo.gen % 10 == 0) {
-			printf("Progress %6.2f %% ...\n", (float)(100.0 * evo.gen/epochs));
-			fflush(stdout);
-		}
+		// if ((int)evo.gen % 5 == 0) {
+		// 	syslog_info("Progress %6.2f %%, loss = %.2lf ...", 
+		// 		(float)(100.0 * evo.gen/epochs),  evo.rgFuncValue[evo.index[0]]);
+		// 	// fflush(stdout);
+		// }
+		syslog_info("Progress %6.2f %%, loss = %.2lf ...", 
+			(float)(100.0 * evo.gen/epochs),  evo.rgFuncValue[evo.index[0]]);
 	}
-	printf("Stop Condition:\n%s\n", cmaes_TestForTermination(&evo));	/* print termination reason */
+	syslog_info("Stop Condition:%s", cmaes_TestForTermination(&evo));	/* print termination reason */
 
 	cmaes_WriteToFile(&evo, "all", "/tmp/cmaes_results.txt");	/* write final results */
 
@@ -166,7 +169,7 @@ TENSOR *wcode_search(TENSOR *reference_tensor)
 	CHECK_TENSOR(wcode_tensor);
 
 	stand_tensor = reference_tensor;
-	best = cmaes_search(300);
+	best = cmaes_search(2);
 
 	// Save best to wcode
 	for (i = 0; i < W_SPACE_DIM; i++)
