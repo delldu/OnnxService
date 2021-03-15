@@ -11,6 +11,7 @@
 #include <getopt.h>
 #include <stdlib.h>
 #include <syslog.h>
+#include <pthread.h>
 
 #include <nimage/image.h>
 #include <nimage/nnmsg.h>
@@ -28,11 +29,17 @@ OrtEngine *decoder_engine = NULL;
 OrtEngine *transformer_engine = NULL;
 TENSOR *stand_tensor = NULL;
 
+typedef struct {				/* Used as argument to fit_start() */
+	pthread_t id;				/* ID returned by pthread_create() */
+	int no;						/* Sub thread */
+	double *x, y;
+} THREAD_INFOS;
+
+
 // Transform zcode to wcode
 int sample_t(double *x, int n)
 {
 	int i;
-	float *f;
 	TENSOR *zcode_tensor, *wcode_tensor;
 
 	CheckEngine(transformer_engine);
@@ -42,9 +49,8 @@ int sample_t(double *x, int n)
 	if (! tensor_valid(zcode_tensor)) {
 		syslog_error("Create zcode tensor.");
 	}
-	f = zcode_tensor->data;
 	for (i = 0; i < n; i++)
-		*f++ = (float)x[i];
+		zcode_tensor->data[i] = (float)x[i];
 
 	// Compute wcode
 	wcode_tensor = TensorForward(transformer_engine, zcode_tensor);
@@ -52,10 +58,17 @@ int sample_t(double *x, int n)
 		syslog_error("Compute wcode from zcode.");
 	}
 
+	// Debug ...
+	#if 0
+	TENSOR *output_tensor = TensorForward(decoder_engine, wcode_tensor);check_tensor(output_tensor);
+	IMAGE *image = image_from_tensor(output_tensor, 0); check_image(image);
+	image_save(image, "/tmp/facegan.png");
+	image_destroy(image);
+	#endif
+
 	// Save wcode to x
-	f = wcode_tensor->data;
 	for (i = 0; i < n; i++)
-		x[i] = (double)*f++;
+		x[i] = (double)wcode_tensor->data[i];
 
 	tensor_destroy(wcode_tensor);
 	tensor_destroy(zcode_tensor);
@@ -63,23 +76,22 @@ int sample_t(double *x, int n)
 	return 0;
 }
 
-double fitfun(double const *x, unsigned long N)
+static void *fit_start(void *arg)
 {
 	int i;
-	double sum;
-	float *f1, *f2;
 	TENSOR *wcode_tensor, *output_image_tensor, *output_tensor;
+	THREAD_INFOS *info = (THREAD_INFOS *)arg;
 
 	CheckEngine(decoder_engine);
 
+	// syslog_info("Running thread %d ...", info->no);
 	// Create wcode tensor
 	wcode_tensor = tensor_create(1, 1, 1, W_SPACE_DIM);
 	if (! tensor_valid(wcode_tensor)) {
 		syslog_error("Create wcode tensor");
 	}
-	f1 = wcode_tensor->data;
 	for (i = 0; i < W_SPACE_DIM; i++)
-		*f1++ = (float)x[i];
+		wcode_tensor->data[i] = (float)info->x[i];
 
 	// Generator image from wcode
 	output_image_tensor = TensorForward(decoder_engine, wcode_tensor);
@@ -92,27 +104,30 @@ double fitfun(double const *x, unsigned long N)
 	}
 
 	// Compute loss, maybe we need more complex method !!!
-	sum = 0;
-	f1 = stand_tensor->data;
-	f2 = output_tensor->data;
-	for (i = 0; i < (int)N; i++) {
-		sum += (double)(*f1 - *f2) * (*f1 - *f2);
-		f1++; f2++;
+	info->y = 0.0;
+	for (i = 0; i < W_SPACE_DIM; i++) {
+		info->y += (double)(stand_tensor->data[i] - output_tensor->data[i]) * 
+				(stand_tensor->data[i] - output_tensor->data[i]);
 	}
+	info->y /= W_SPACE_DIM;
+	// syslog_info("Thread %d result = %.4f", info->no, sum/W_SPACE_DIM);
 
 	// Release tensors
 	tensor_destroy(output_image_tensor);
 	tensor_destroy(output_tensor);
 	tensor_destroy(wcode_tensor);
 
-	return sum/N;
+	return NULL;
 }
+
 
 double *cmaes_search(int epochs)
 {
-	int i, dimension;
 	cmaes_t evo;
+	int i, lambda, ret;
 	double *cost_values, *xfinal, *const *pop;
+	THREAD_INFOS *info;
+	pthread_attr_t attr;
 
 	// cost_values = cmaes_init(&evo, W_SPACE_DIM dimmesion, xstart, stddev, 0, / * lambda */, "none");
 	cmaes_init_para(&evo, W_SPACE_DIM /*dimmesion*/, NULL, NULL, 0, 0 /* lambda */, "none");
@@ -120,20 +135,55 @@ double *cmaes_search(int epochs)
 	evo.sp.stopMaxIter = epochs;	// stop after given number of iterations (generations)
 	evo.sp.stopFitness.flg = 1;
 	evo.sp.stopFitness.val = 1e-2;	// stop if function value is smaller than stopFitness
-	evo.sp.stopTolFun = 1e-4;		// stop if function value differences are small
+	evo.sp.stopTolFun = 1e-3;		// stop if function value differences are small
 	cost_values =  cmaes_init_final(&evo);
 
-
-	dimension = (unsigned int) cmaes_Get(&evo, "dimension");
+	// dimension = (unsigned int) cmaes_Get(&evo, "dimension");
 	syslog_info("%s", cmaes_SayHello(&evo));
+
+	lambda = cmaes_Get(&evo, "lambda");
 
 	while (!cmaes_TestForTermination(&evo)) {
 		/* generate lambda new search points, sample population */
 		pop = cmaes_SamplePopulation(&evo, sample_t);	/* do not change content of pop */
 
-		for (i = 0; i < cmaes_Get(&evo, "lambda"); ++i) {
-			cost_values[i] = fitfun(pop[i], dimension);	/* evaluate */
+		/* Initialize thread creation attributes */
+		ret = pthread_attr_init(&attr);
+		if (ret != 0)
+			syslog_error("pthread_attr_init");
+
+		info = (THREAD_INFOS *)calloc(lambda, sizeof(THREAD_INFOS));
+		if (info == NULL)
+			syslog_error("Allocte memory.");
+
+		// for (i = 0; i < lambda; ++i) {
+		// 	cost_values[i] = fitfun(pop[i], dimension);	/* evaluate */
+		// }
+		for (i = 0; i < lambda; i++) {
+			info[i].no = i + 1;
+			info[i].x = (double *)&pop[i];
+
+			ret = pthread_create(&info[i].id, &attr, &fit_start, &info[i]);
+			if (ret != 0)
+				syslog_error("pthread_create");
 		}
+		ret = pthread_attr_destroy(&attr);
+		if (ret != 0)
+			syslog_error("pthread_attr_destroy");
+
+		/* Now join with each thread */
+		for (i = 0; i < lambda; i++) {
+			ret = pthread_join(info[i].id, NULL);
+			if (ret != 0)
+				syslog_error("pthread_join");
+		}
+
+		// Save cost
+		for (i = 0; i < lambda; i++) {
+			cost_values[i] = info[i].y;
+		}
+
+		free(info);
 
 		cmaes_UpdateDistribution(&evo, cost_values);	/* assumes that pop[i] has not been modified */
 
@@ -142,7 +192,7 @@ double *cmaes_search(int epochs)
 		// 		(float)(100.0 * evo.gen/epochs),  evo.rgFuncValue[evo.index[0]]);
 		// 	// fflush(stdout);
 		// }
-		syslog_info("Progress %6.2f %%, loss = %.2lf ...", 
+		syslog_info("Progress %6.2f %%, loss = %.4lf ...", 
 			(float)(100.0 * evo.gen/epochs),  evo.rgFuncValue[evo.index[0]]);
 	}
 	syslog_info("Stop Condition:%s", cmaes_TestForTermination(&evo));	/* print termination reason */
@@ -169,7 +219,7 @@ TENSOR *wcode_search(TENSOR *reference_tensor)
 	CHECK_TENSOR(wcode_tensor);
 
 	stand_tensor = reference_tensor;
-	best = cmaes_search(2);
+	best = cmaes_search(10);
 
 	// Save best to wcode
 	for (i = 0; i < W_SPACE_DIM; i++)
@@ -182,22 +232,21 @@ TENSOR *wcode_search(TENSOR *reference_tensor)
 
 int FaceGanService(char *endpoint, int use_gpu)
 {
-	int socket, reqcode, count, rescode;
+	int socket, reqcode, lambda, rescode;
 	TENSOR *input_tensor, *output_tensor, *wcode_tensor;
 
 	if ((socket = server_open(endpoint)) < 0)
 		return RET_ERROR;
 
-	decoder_engine = CreateEngine("image_gandecoder.onnx", use_gpu);
+	decoder_engine = CreateEngine("image_gandecoder.onnx", 0 /*not use_gpu for model bug !!!*/);
 	CheckEngine(decoder_engine);
 
 	transformer_engine = CreateEngine("image_gantransformer.onnx", use_gpu);
 	CheckEngine(transformer_engine);
 
-
-	count = 0;
+	lambda = 0;
 	for (;;) {
-		syslog_info("Service %d times", count);
+		syslog_info("Service %d times", lambda);
 
 		input_tensor = request_recv(socket, &reqcode);
 
@@ -216,6 +265,11 @@ int FaceGanService(char *endpoint, int use_gpu)
 
 		if (tensor_valid(output_tensor)) {
 			rescode = reqcode;
+#if 1	// For debug			
+			IMAGE *image = image_from_tensor(output_tensor, 0);
+			image_save(image, "/tmp/decoder.png");
+			image_destroy(image);
+#endif
 			response_send(socket, output_tensor, rescode);
 			tensor_destroy(output_tensor);
 		}
@@ -224,7 +278,7 @@ int FaceGanService(char *endpoint, int use_gpu)
 
 		tensor_destroy(input_tensor);
 
-		count++;
+		lambda++;
 	}
 	DestroyEngine(transformer_engine);
 	DestroyEngine(decoder_engine);
@@ -269,12 +323,43 @@ int facegan(int socket, char *input_file)
 	return RET_OK;
 }
 
+int test()
+{
+	int i;
+	TENSOR *wcode_tensor, *output_tensor;
+	IMAGE *image;
+
+	decoder_engine = CreateEngine("image_gandecoder.onnx", 0);
+	CheckEngine(decoder_engine);
+
+	time_reset();
+	wcode_tensor = tensor_create(1, 1, 1, 512);
+	for (i = 0; i < 512; i++)
+		wcode_tensor->data[0] = 0;
+	output_tensor = TensorForward(decoder_engine, wcode_tensor);
+	time_spend((char *)"Infer");
+
+	image = image_from_tensor(output_tensor, 0);
+	image_save(image, "zero.png");
+	image_destroy(image);
+
+
+	tensor_destroy(output_tensor);
+	tensor_destroy(wcode_tensor);
+
+	DestroyEngine(decoder_engine);
+
+	return 0;
+}
+
+
 void help(char *cmd)
 {
 	printf("Usage: %s [option] <image files>\n", cmd);
 	printf("    h, --help                   Display this help.\n");
 	printf("    e, --endpoint               Set endpoint.\n");
 	printf("    s, --server <0 | 1>         Start server (use gpu).\n");
+	printf("    t, --test                   Test.\n");
 
 	exit(1);
 }
@@ -293,13 +378,15 @@ int main(int argc, char **argv)
 		{"help", 0, 0, 'h'},
 		{"endpoint", 1, 0, 'e'},
 		{"server", 1, 0, 's'},
+		{"test", 0, 0, 't'},
+
 		{0, 0, 0, 0}
 	};
 
 	if (argc <= 1)
 		help(argv[0]);
 
-	while ((optc = getopt_long(argc, argv, "h e: s:", long_opts, &option_index)) != EOF) {
+	while ((optc = getopt_long(argc, argv, "h e: s: t", long_opts, &option_index)) != EOF) {
 		switch (optc) {
 		case 'e':
 			endpoint = optarg;
@@ -308,6 +395,10 @@ int main(int argc, char **argv)
 			running_server = 1;
 			use_gpu = atoi(optarg);
 			break;
+		case 't':
+			return test();
+			break;
+
 		case 'h':				// help
 		default:
 			help(argv[0]);
