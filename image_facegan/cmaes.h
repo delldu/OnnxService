@@ -19,8 +19,6 @@
 
 #define CheckPoint(fmt, arg...) printf("# CheckPoint: %d(%s): " fmt "\n", (int)__LINE__, __FILE__, ##arg)
 
-typedef int(*SampleTransformer)(double *, int);
-
 typedef struct
 /* cmaes_random_t 
  * sets up a pseudo random number generator instance 
@@ -193,7 +191,7 @@ typedef struct
 	void cmaes_exit(cmaes_t *);
 
 /* --- core functions --- */
-	double *const *cmaes_SamplePopulation(cmaes_t *, SampleTransformer st);
+	double *const *cmaes_SamplePopulation(cmaes_t *, double wsamples[][512]);
 	double *cmaes_UpdateDistribution(cmaes_t *, const double *rgFitnessValues);
 	const char *cmaes_TestForTermination(cmaes_t *);
 

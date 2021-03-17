@@ -252,8 +252,6 @@ void cmaes_init_para(cmaes_t * t,	/* "this" */
 }
 
 double *cmaes_init_final(cmaes_t * t /* "this" */ )
-/*
- * */
 {
 	int i, j, N;
 	double dtest, trace;
@@ -598,16 +596,14 @@ double const *cmaes_SetMean(cmaes_t * t, const double *xmean)
 
 /* --------------------------------------------------------- */
 /* --------------------------------------------------------- */
-double *const *cmaes_SamplePopulation(cmaes_t * t, SampleTransformer st)
+double *const *cmaes_SamplePopulation(cmaes_t * t, double wsamples[][512])
 {
 	int iNk, i, j, N = t->sp.N;
 	int flgdiag = ((t->sp.diagonalCov == 1) || (t->sp.diagonalCov >= t->gen));
 	double sum;
 	double const *xmean = t->rgxmean;
-	double samples[1024];
 
-	if ((int)sizeof(samples) < N)
-		FATAL("Design error: samples size is less N", NULL, NULL, NULL);
+	// CheckPoint("flgdiag = %d,  t->sp.diagonalCov=%d, t->gen=%d", flgdiag, t->sp.diagonalCov, t->gen);
 
 	/* cmaes_SetMean(t, xmean); * xmean could be changed at this point */
 
@@ -632,16 +628,11 @@ double *const *cmaes_SamplePopulation(cmaes_t * t, SampleTransformer st)
 
 	for (iNk = 0; iNk < t->sp.lambda; ++iNk) {	/* generate scaled cmaes_random vector (D * z)    */
 		// Sample randn(N)
-		for (i = 0; i < N; i++)
-			samples[i] = cmaes_random_Gauss();
-		if (st != NULL)
-			st(samples, N);	// Transformer ...
-
 		for (i = 0; i < N; ++i) {
 			if (flgdiag)
-				t->rgrgx[iNk][i] = xmean[i] + t->sigma * t->rgD[i] * samples[i];
+				t->rgrgx[iNk][i] = xmean[i] + t->sigma * t->rgD[i] * wsamples[iNk][i];
 			else
-				t->rgdTmp[i] = t->rgD[i] * samples[i];
+				t->rgdTmp[i] = t->rgD[i] * wsamples[iNk][i];
 		}
 		if (!flgdiag)
 			/* add mutation (sigma * B * (D*z)) */
@@ -2623,8 +2614,6 @@ void cmaes_readpara_SupplementDefaults(cmaes_readpara_t * t)
 	double t1, t2;
 	int N = t->N;
 	clock_t cloc = clock();
-
-	// 
 
 	if (t->flgsupplemented)
 		FATAL("cmaes_readpara_SupplementDefaults() cannot be called twice.", 0, 0, 0);
