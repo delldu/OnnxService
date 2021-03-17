@@ -191,7 +191,7 @@ typedef struct
 	void cmaes_exit(cmaes_t *);
 
 /* --- core functions --- */
-	double *const *cmaes_SamplePopulation(cmaes_t *, double wsamples[][512]);
+	double *const *cmaes_SamplePopulation(cmaes_t *);
 	double *cmaes_UpdateDistribution(cmaes_t *, const double *rgFitnessValues);
 	const char *cmaes_TestForTermination(cmaes_t *);
 
@@ -213,4 +213,11 @@ typedef struct
 /* --- misc --- */
 	double *cmaes_NewDouble(int n);	/* user is responsible to free */
 	void cmaes_FATAL(char const *s1, char const *s2, char const *s3, char const *s4);
+
+	double rgdouMin(const double *rgd, int len);
+	double douSquare(double);
+	double rgdouMax(const double *rgd, int len);
+	void cmaes_timings_start(cmaes_timings_t * t);
+	void TestMinStdDevs(cmaes_t *);
+
 #endif

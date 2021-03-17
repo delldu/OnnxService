@@ -187,7 +187,6 @@ void cmaes_FATAL(char const *s1, char const *s2, char const *s3, char const *s4)
 /* ------------------- Locally visibly ----------------------- */
 
 static char *getTimeStr(void);
-static void TestMinStdDevs(cmaes_t *);
 
 static void Eigen(int N, double **C, double *diag, double **Q, double *rgtmp);
 static int Check_Eigen(int N, double **C, double *diag, double **Q);
@@ -200,9 +199,6 @@ static void ERRORMESSAGE(char const *sz1, char const *s2, char const *s3, char c
 static int isNoneStr(const char *filename);
 static void Sorted_index(const double *rgFunVal, int *index, int n);
 static int SignOfDiff(const void *d1, const void *d2);
-static double douSquare(double);
-static double rgdouMax(const double *rgd, int len);
-static double rgdouMin(const double *rgd, int len);
 static double douMax(double d1, double d2);
 static double douMin(double d1, double d2);
 static int MaxIdx(const double *rgd, int len);
@@ -252,6 +248,8 @@ void cmaes_init_para(cmaes_t * t,	/* "this" */
 }
 
 double *cmaes_init_final(cmaes_t * t /* "this" */ )
+/*
+ * */
 {
 	int i, j, N;
 	double dtest, trace;
@@ -596,14 +594,12 @@ double const *cmaes_SetMean(cmaes_t * t, const double *xmean)
 
 /* --------------------------------------------------------- */
 /* --------------------------------------------------------- */
-double *const *cmaes_SamplePopulation(cmaes_t * t, double wsamples[][512])
+double *const *cmaes_SamplePopulation(cmaes_t * t)
 {
 	int iNk, i, j, N = t->sp.N;
 	int flgdiag = ((t->sp.diagonalCov == 1) || (t->sp.diagonalCov >= t->gen));
 	double sum;
 	double const *xmean = t->rgxmean;
-
-	// CheckPoint("flgdiag = %d,  t->sp.diagonalCov=%d, t->gen=%d", flgdiag, t->sp.diagonalCov, t->gen);
 
 	/* cmaes_SetMean(t, xmean); * xmean could be changed at this point */
 
@@ -627,12 +623,11 @@ double *const *cmaes_SamplePopulation(cmaes_t * t, double wsamples[][512])
 	// CheckPoint("flgdiag = %d", flgdiag); flgdiag == 0
 
 	for (iNk = 0; iNk < t->sp.lambda; ++iNk) {	/* generate scaled cmaes_random vector (D * z)    */
-		// Sample randn(N)
 		for (i = 0; i < N; ++i) {
 			if (flgdiag)
-				t->rgrgx[iNk][i] = xmean[i] + t->sigma * t->rgD[i] * wsamples[iNk][i];
+				t->rgrgx[iNk][i] = xmean[i] + t->sigma * t->rgD[i] * cmaes_random_Gauss();
 			else
-				t->rgdTmp[i] = t->rgD[i] * wsamples[iNk][i];
+				t->rgdTmp[i] = t->rgD[i] * cmaes_random_Gauss();
 		}
 		if (!flgdiag)
 			/* add mutation (sigma * B * (D*z)) */
@@ -732,7 +727,7 @@ const double *cmaes_Optimize(cmaes_t * evo, double (*pFun) (double const *, int 
 
 	while (!(stop = cmaes_TestForTermination(evo)) && (evo->gen < startiter + iterations || !iterations)) {
 		/* Generate population of new candidate solutions */
-		pop = cmaes_SamplePopulation(evo, NULL);	/* do not change content of pop */
+		pop = cmaes_SamplePopulation(evo);	/* do not change content of pop */
 
 		/* Compute fitness value for each candidate solution */
 		for (i = 0; i < cmaes_Get(evo, "popsize"); ++i) {
@@ -956,7 +951,7 @@ static void Adapt_C2(cmaes_t * t, int hsig)
 
 /* --------------------------------------------------------- */
 /* --------------------------------------------------------- */
-static void TestMinStdDevs(cmaes_t * t)
+void TestMinStdDevs(cmaes_t * t)
   /* increases sigma */
 {
 	int i, N = t->sp.N;
@@ -2432,15 +2427,15 @@ cmaes_readpara_init(cmaes_readpara_t * t,
 	N = t->N;
 	if (N == 0)
 		FATAL("cmaes_readpara_t(): problem dimension N undefined.\n", "  (no default value available).", 0, 0);
-	// if (t->xstart == NULL && inxstart == NULL && t->typicalX == NULL) {
-	// 	ERRORMESSAGE("Error: initialX undefined. typicalX = 0.5...0.5 used.", "", "", "");
-	// 	printf("\nError: initialX undefined. typicalX = 0.5...0.5 used.\n");
-	// }
-	// if (t->rgInitialStds == NULL && inrgsigma == NULL) {
-	// 	/* FATAL("initialStandardDeviations undefined","","",""); */
-	// 	ERRORMESSAGE("Error: initialStandardDeviations undefined. 0.3...0.3 used.", "", "", "");
-	// 	printf("\nError: initialStandardDeviations undefined. 0.3...0.3 used.\n");
-	// }
+	if (t->xstart == NULL && inxstart == NULL && t->typicalX == NULL) {
+		ERRORMESSAGE("Error: initialX undefined. typicalX = 0.5...0.5 used.", "", "", "");
+		printf("\nError: initialX undefined. typicalX = 0.5...0.5 used.\n");
+	}
+	if (t->rgInitialStds == NULL && inrgsigma == NULL) {
+		/* FATAL("initialStandardDeviations undefined","","",""); */
+		ERRORMESSAGE("Error: initialStandardDeviations undefined. 0.3...0.3 used.", "", "", "");
+		printf("\nError: initialStandardDeviations undefined. 0.3...0.3 used.\n");
+	}
 
 	if (t->xstart == NULL) {
 		t->xstart = new_double(N);
@@ -2615,6 +2610,8 @@ void cmaes_readpara_SupplementDefaults(cmaes_readpara_t * t)
 	int N = t->N;
 	clock_t cloc = clock();
 
+	// 
+
 	if (t->flgsupplemented)
 		FATAL("cmaes_readpara_SupplementDefaults() cannot be called twice.", 0, 0, 0);
 	if (t->seed < 1) {
@@ -2741,7 +2738,7 @@ static int isNoneStr(const char *filename)
 
 /* --------------------------------------------------------- */
 /* --------------------------------------------------------- */
-static double douSquare(double d)
+double douSquare(double d)
 {
 	return d * d;
 }
@@ -2756,7 +2753,7 @@ static double douMin(double i, double j)
 	return i < j ? i : j;
 }
 
-static double rgdouMax(const double *rgd, int len)
+double rgdouMax(const double *rgd, int len)
 {
 	int i;
 	double max = rgd[0];
@@ -2765,7 +2762,7 @@ static double rgdouMax(const double *rgd, int len)
 	return max;
 }
 
-static double rgdouMin(const double *rgd, int len)
+double rgdouMin(const double *rgd, int len)
 {
 	int i;
 	double min = rgd[0];
