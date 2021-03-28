@@ -21,20 +21,70 @@
 // #define VIDEO_SLOW_URL "ipc:///tmp/image_facegan.ipc"
 #define VIDEO_SLOW_URL "tcp://127.0.0.1:9203"
 
-#define DEBUG 1
-
 TENSOR *flow_backwarp(TENSOR *image, TENSOR *flow)
 {
-	return NULL;
+	int i, j, b;
+	float *imap, *jmap, *uflow, *vflow;
+	TENSOR *grid, *output;
+
+	CHECK_TENSOR(image);
+	CHECK_TENSOR(flow);
+
+	if (flow->chan != 2) {
+		syslog_error("Flow must be Bx2xHxW tensor.");
+		return NULL;
+	}
+
+	grid = tensor_create(flow->batch, 2, flow->height, flow->width); CHECK_TENSOR(grid);
+	for (b = 0; b < grid->batch; b++) {
+		imap = tensor_start_chan(grid, b, 0);
+		jmap = tensor_start_chan(grid, b, 1);
+
+		uflow = tensor_start_chan(flow, b, 0);
+		vflow = tensor_start_chan(flow, b, 1);
+
+		/*****************************************************
+		* Imap:
+		*   0				0
+		*   1				1
+		*   2				2
+		* ...				...
+		* 512				512
+		*****************************************************/
+		for (i = 0; i < grid->height; i++) {
+			for(j = 0; j < grid->width; j++)
+				*imap++ = (i + *vflow++)/grid->height;	// same cols
+		}
+		/*****************************************************
+		* Jmap:
+		*   0	1	2	...		960
+		*   0	1	2	...		960
+		*   0	1	2	...		960
+		*   0	1	2	...		960
+		*****************************************************/
+		for (i = 0; i < grid->height; i++) {
+			for(j = 0; j < grid->width; j++)
+				*jmap++ = (j + *uflow++)/grid->width;	// same rows
+		}
+	}
+
+	output = tensor_grid_sample(image, grid);
+
+	tensor_destroy(grid);
+
+	CheckPoint();
+	tensor_show(output);
+
+	return output;
 }
 
 // For scale == 4:
 // input_tensor  -- [1, 6, 512, 960]
-// output_tensor -- [1, 3, 512, 960] * 3
+// output_tensor -- [4 - 1, 3, 512, 960]
 TENSOR *slow_do(OrtEngine *fc, OrtEngine *at, TENSOR *input_tensor, int scale)
 {
-	int i, j, n;
-	float t, w[4], *to, a, b;
+	int i, j, c, n;
+	float t, w[4], *to, *from0, *from1, a, b;
 	TENSOR *I0, *I1, *flowOut, *F_0_1, *F_1_0, *F_t_0, *F_t_1, *output_tensor;
 
 	CheckEngine(fc);
@@ -48,7 +98,10 @@ TENSOR *slow_do(OrtEngine *fc, OrtEngine *at, TENSOR *input_tensor, int scale)
 	}
 
 	I0 = tensor_slice_chan(input_tensor, 0, 3); CHECK_TENSOR(I0);
+	// SaveTensorAsImage(I0, "I0.png");
+
 	I1 = tensor_slice_chan(input_tensor, 3, 6); CHECK_TENSOR(I1);
+	// SaveTensorAsImage(I1, "I1.png");
 
     flowOut = TensorForward(fc, input_tensor);
     CHECK_TENSOR(flowOut);
@@ -59,7 +112,7 @@ TENSOR *slow_do(OrtEngine *fc, OrtEngine *at, TENSOR *input_tensor, int scale)
 	F_0_1 = tensor_slice_chan(flowOut, 0, 2); CHECK_TENSOR(F_0_1);
 	F_1_0 = tensor_slice_chan(flowOut, 2, 4); CHECK_TENSOR(F_1_0);
 
-    n = F_0_1->batch * F_0_1->chan * F_0_1->height * F_0_1->width;
+    n = F_0_1->height * F_0_1->width;
 
 	// Suppose_X
 	F_t_0 = tensor_create(1, 2, input_tensor->height, input_tensor->width);
@@ -68,7 +121,7 @@ TENSOR *slow_do(OrtEngine *fc, OrtEngine *at, TENSOR *input_tensor, int scale)
 	CHECK_TENSOR(F_t_1);
 
   	// Suppose_X
-	output_tensor = tensor_create(1, (scale - 1) * input_tensor->chan, input_tensor->height, input_tensor->width);
+	output_tensor = tensor_create(scale - 1, 3, input_tensor->height, input_tensor->width);
 	CHECK_TENSOR(output_tensor);
 
     for (j = 0; j < scale - 1; j++) {
@@ -142,12 +195,18 @@ TENSOR *slow_do(OrtEngine *fc, OrtEngine *at, TENSOR *input_tensor, int scale)
 
         // Save to output_tensor
         w[0] = (1.0 - t); w[1] = t;
-    	to = tensor_start_chan(output_tensor, 0, 3 * j); // for Suppose_X
-        for (i = 0; i < 3 * n; i++) {	 // output_tensor --3 Channels
-        	a = w[0] * g_I0_F_t_0_mask->data[i];
-        	b = w[1] * (1.0 - g_I0_F_t_0_mask->data[i]); // g_I1_F_t_1_mask->data[i];
-        	t = a + b + 0.000001; // t == 0 ?
-        	to[i] = (a * g_I0_F_t_0_fine->data[i] + b * g_I1_F_t_1_fine->data[i])/t;
+        for (c = 0; c < output_tensor->chan; c++) {
+	    	to = tensor_start_chan(output_tensor, j, c); // for Suppose_X
+	    	from0 = tensor_start_chan(g_I0_F_t_0_fine, 0, c);
+	    	from1 = tensor_start_chan(g_I1_F_t_1_fine, 0, c);
+
+	        for (i = 0; i < n; i++) {	 // output_tensor --3 Channels
+	        	a = w[0] * g_I0_F_t_0_mask->data[i];
+	        	b = w[1] * (1.0 - g_I0_F_t_0_mask->data[i]); // g_I1_F_t_1_mask->data[i];
+	        	t = a + b + 0.000001; // t == 0 ?
+	        	to[i] = (a * from0[i] + b * from1[i])/t;
+	        	to[i] = CLAMP(to[i], 0.0, 1.0);
+	        }
         }
 
         tensor_destroy(F_t_1_f);
@@ -165,15 +224,10 @@ TENSOR *slow_do(OrtEngine *fc, OrtEngine *at, TENSOR *input_tensor, int scale)
 	tensor_destroy(I1);
 	tensor_destroy(I0);
 
+	CheckPoint();
+	tensor_show(output_tensor);
+
 	return output_tensor;
-}
-
-
-void output_image(TENSOR *tensor, const char *prefix, int index)
-{
-	char filename[256];
-	snprintf(filename, sizeof(filename), "output/%s-%04d.png", prefix, index);
-	SaveTensorAsImage(tensor, filename);
 }
 
 int SlowService(char *endpoint, int use_gpu)
@@ -235,31 +289,101 @@ int server(char *endpoint, int use_gpu)
 	return SlowService(endpoint, use_gpu);
 }
 
-int slow(int socket, char *input_file)
+TENSOR *slow_load(char *input_file1, char *input_file2)
 {
-	int rescode;
-	IMAGE *send_image, *resize_send_image;
+	int n;
+	float *to;
+
+	IMAGE *image1, *image2;
+	TENSOR *tensor1, *tensor2, *output = NULL;
+
+	image1 = image_load(input_file1); CHECK_IMAGE(image1);
+	image2 = image_load(input_file2); CHECK_IMAGE(image2);
+
+	if (image1->height == image2->height && image1->width == image2->width) {
+		tensor1 = tensor_from_image(image1, 0 /* without channel A */);	CHECK_TENSOR(tensor1);
+		tensor2 = tensor_from_image(image2, 0 /* without channel A */);	CHECK_TENSOR(tensor2);
+
+		output = tensor_create(1, 6, image1->height, image1->width);
+		CHECK_TENSOR(output);
+		n = output->height * output->width;
+		to = output->data;
+		memcpy(to, tensor1->data, 3 * n * sizeof(float));
+		to = &output->data[3 * n];
+		memcpy(to, tensor2->data, 3 * n * sizeof(float));
+
+		tensor_destroy(tensor2);
+		tensor_destroy(tensor1);
+	} else {
+		syslog_error("Image size is not same,");
+	}
+
+	image_destroy(image2);
+	image_destroy(image1);
+
+	return output;
+}
+
+int slow_save(TENSOR *tensor)
+{
+	int b;
+	IMAGE *image;
+	char filename[256];
+
+	check_tensor(tensor);
+	for (b = 0; b < tensor->batch; b++) {
+		image = image_from_tensor(tensor, b);
+		snprintf(filename, sizeof(filename), "output/%06d.png", b + 1);
+		image_save(image, filename);
+		image_destroy(image);
+	}
+
+	return RET_OK;
+}
+
+
+TENSOR *slow_onnxrpc(int socket, TENSOR *send_tensor)
+{
+	int nh, nw, rescode;
+	TENSOR *resize_send, *resize_recv, *recv_tensor;
+
+	CHECK_TENSOR(send_tensor);
+
+	// server limited: only accept 4 times tensor !!!
+	nh = (send_tensor->height + 7)/8; nh *= 8;
+	nw = (send_tensor->width + 7)/8; nw *= 8;
+
+	if (send_tensor->height == nh && send_tensor->width == nw) {
+		// Normal onnx RPC
+		recv_tensor = OnnxRPC(socket, send_tensor, VIDEO_SLOW_REQCODE, &rescode);
+	} else {
+		resize_send = tensor_zoom(send_tensor, nh, nw); CHECK_TENSOR(resize_send);
+		resize_recv = OnnxRPC(socket, resize_send, VIDEO_SLOW_REQCODE, &rescode);
+		recv_tensor = tensor_zoom(resize_recv, send_tensor->height, send_tensor->width);
+		tensor_destroy(resize_recv);
+		tensor_destroy(resize_send);
+	}
+
+	return recv_tensor;
+}
+
+
+int slow(int socket, char *input_file1, char *input_file2)
+{
 	TENSOR *send_tensor, *recv_tensor;
 
-	printf("Video Slowing %s ...\n", input_file);
+	printf("Video Slowing between %s and %s ...\n", input_file1, input_file2);
 
-	send_image = image_load(input_file); check_image(send_image);
-	resize_send_image = image_zoom(send_image, 256, 256, 1); check_image(resize_send_image);
+	send_tensor = slow_load(input_file1, input_file2);
+	check_tensor(send_tensor);
 
-	if (image_valid(resize_send_image)) {
-		send_tensor = tensor_from_image(resize_send_image, 0);
-		check_tensor(send_tensor);
-
-		recv_tensor = OnnxRPC(socket, send_tensor, VIDEO_SLOW_REQCODE, &rescode);
-		if (tensor_valid(recv_tensor)) {
-			SaveTensorAsImage(recv_tensor, input_file);
-			tensor_destroy(recv_tensor);
-		}
-
-		tensor_destroy(send_tensor);
-		image_destroy(resize_send_image);
+	recv_tensor = slow_onnxrpc(socket, send_tensor);
+	if (tensor_valid(recv_tensor)) {
+		slow_save(recv_tensor);
+		tensor_destroy(recv_tensor);
 	}
-	image_destroy(send_image);
+
+	tensor_destroy(send_tensor);
 
 	return RET_OK;
 }
@@ -317,8 +441,8 @@ int main(int argc, char **argv)
 		if ((socket = client_open(endpoint)) < 0)
 			return RET_ERROR;
 
-		for (i = 1; i < argc; i++)
-			slow(socket, argv[i]);
+		for (i = optind; i + 1 < argc; i++)
+			slow(socket, argv[i], argv[i + 1]);
 
 		client_close(socket);
 		return RET_OK;
