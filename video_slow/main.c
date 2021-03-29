@@ -36,6 +36,7 @@ TENSOR *flow_backwarp(TENSOR *image, TENSOR *flow)
 	}
 
 	grid = tensor_create(flow->batch, 2, flow->height, flow->width); CHECK_TENSOR(grid);
+
 	for (b = 0; b < grid->batch; b++) {
 		imap = tensor_start_chan(grid, b, 0);
 		jmap = tensor_start_chan(grid, b, 1);
@@ -71,9 +72,6 @@ TENSOR *flow_backwarp(TENSOR *image, TENSOR *flow)
 	output = tensor_grid_sample(image, grid);
 
 	tensor_destroy(grid);
-
-	CheckPoint();
-	tensor_show(output);
 
 	return output;
 }
@@ -224,9 +222,6 @@ TENSOR *slow_do(OrtEngine *fc, OrtEngine *at, TENSOR *input_tensor, int scale)
 	tensor_destroy(I1);
 	tensor_destroy(I0);
 
-	CheckPoint();
-	tensor_show(output_tensor);
-
 	return output_tensor;
 }
 
@@ -372,7 +367,7 @@ int slow(int socket, char *input_file1, char *input_file2)
 {
 	TENSOR *send_tensor, *recv_tensor;
 
-	printf("Video Slowing between %s and %s ...\n", input_file1, input_file2);
+	printf("Video slowing between %s and %s ...\n", input_file1, input_file2);
 
 	send_tensor = slow_load(input_file1, input_file2);
 	check_tensor(send_tensor);
