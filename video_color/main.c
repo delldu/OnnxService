@@ -18,13 +18,21 @@
 #include "engine.h"
 
 #define VIDEO_COLOR_REQCODE 0x0202
+#define VIDEO_REFERENCE_REQCODE 0x0212
 // #define VIDEO_COLOR_URL "ipc:///tmp/video_color.ipc"
 #define VIDEO_COLOR_URL "tcp://127.0.0.1:9202"
+TENSOR *reference_rgb_tensor = NULL;
+TENSOR *reference_lab_tensor = NULL;
 
-
-TENSOR *color_do(OrtEngine *vgg19, OrtEngine *warp, OrtEngine *color, TENSOR *input_tensor)
+TENSOR *color_do(OrtEngine *align, OrtEngine *color, TENSOR *input_tensor)
 {
 	TENSOR *output_tensor = NULL;
+
+	CHECK_TENSOR(input_tensor);
+	CheckEngine(align);
+	CheckEngine(color);
+
+	output_tensor = tensor_copy(input_tensor);
 
 	return output_tensor;
 }
@@ -34,19 +42,15 @@ int ColorService(char *endpoint, int use_gpu)
 	int socket, reqcode, lambda, rescode;
 	TENSOR *input_tensor, *output_tensor;
 	OrtEngine *color_engine = NULL;
-	OrtEngine *vgg19_engine = NULL;
-	OrtEngine *warp_engine = NULL;
+	OrtEngine *align_engine = NULL;
 
 	srand(time(NULL));
 
 	if ((socket = server_open(endpoint)) < 0)
 		return RET_ERROR;
 
-	vgg19_engine = CreateEngine("video_vgg19.onnx", use_gpu /*use_gpu*/);
-	CheckEngine(vgg19_engine);
-
-	warp_engine = CreateEngine("video_warp.onnx", use_gpu /*use_gpu*/);
-	CheckEngine(vgg19_engine);
+	align_engine = CreateEngine("video_align.onnx", use_gpu /*use_gpu*/);
+	CheckEngine(align_engine);
 
 	color_engine = CreateEngine("video_color.onnx", use_gpu /*use_gpu*/);
 	CheckEngine(color_engine);
@@ -63,9 +67,25 @@ int ColorService(char *endpoint, int use_gpu)
 		}
 		syslog_info("Request Code = %d", reqcode);
 
+		if (reqcode == VIDEO_REFERENCE_REQCODE) {
+			// Save tensor to global reference tensor
+			tensor_destroy(reference_rgb_tensor);
+			reference_rgb_tensor = tensor_zoom(reference_rgb_tensor, 512, 512);
+
+			// tensor_destroy(reference_lab_tensor);
+			// reference_lab_tensor = tensor_rgb2lab(reference_rgb_tensor);
+
+			// Respone echo input_tensor ...
+			response_send(socket, input_tensor, VIDEO_REFERENCE_REQCODE);
+
+			// Next for service ...
+			tensor_destroy(input_tensor);
+			continue;
+		}
+
 		// Real service ...
 		time_reset();
-		output_tensor = color_do(vgg19_engine, warp_engine, color_engine, input_tensor);
+		output_tensor = color_do(align_engine, color_engine, input_tensor);
 		time_spend((char *)"Infer");
 
 		if (tensor_valid(output_tensor)) {
@@ -79,9 +99,11 @@ int ColorService(char *endpoint, int use_gpu)
 		lambda++;
 	}
 
+	tensor_destroy(reference_lab_tensor);
+	tensor_destroy(reference_rgb_tensor);
+
 	DestroyEngine(color_engine);
-	DestroyEngine(warp_engine);
-	DestroyEngine(vgg19_engine);
+	DestroyEngine(align_engine);
 
 	syslog(LOG_INFO, "Service shutdown.\n");
 	server_close(socket);
@@ -94,108 +116,45 @@ int server(char *endpoint, int use_gpu)
 	return ColorService(endpoint, use_gpu);
 }
 
-TENSOR *color_load(char *input_file1, char *input_file2)
+TENSOR *color_load(char *filename)
 {
-	int n;
-	float *to;
+	IMAGE *image;
+	TENSOR *tensor;
 
-	IMAGE *image1, *image2;
-	TENSOR *tensor1, *tensor2, *output = NULL;
+	image = image_load(filename); CHECK_IMAGE(image);
+	tensor = tensor_from_image(image, 0 /* without alpha */);
+	image_destroy(image);
 
-	image1 = image_load(input_file1); CHECK_IMAGE(image1);
-	image2 = image_load(input_file2); CHECK_IMAGE(image2);
-
-	if (image1->height == image2->height && image1->width == image2->width) {
-		tensor1 = tensor_from_image(image1, 0 /* without channel A */);	CHECK_TENSOR(tensor1);
-		tensor2 = tensor_from_image(image2, 0 /* without channel A */);	CHECK_TENSOR(tensor2);
-
-		output = tensor_create(1, 6, image1->height, image1->width);
-		CHECK_TENSOR(output);
-		n = output->height * output->width;
-		to = output->data;
-		memcpy(to, tensor1->data, 3 * n * sizeof(float));
-		to = &output->data[3 * n];
-		memcpy(to, tensor2->data, 3 * n * sizeof(float));
-
-		tensor_destroy(tensor2);
-		tensor_destroy(tensor1);
-	} else {
-		syslog_error("Image size is not same,");
-	}
-
-	image_destroy(image2);
-	image_destroy(image1);
-
-	return output;
+	return tensor;
 }
 
-int color_save(TENSOR *tensor)
+int color_save(TENSOR *tensor, int index)
 {
-	int b;
 	IMAGE *image;
 	char filename[256];
 
-	check_tensor(tensor);
-	for (b = 0; b < tensor->batch; b++) {
-		image = image_from_tensor(tensor, b);
-		snprintf(filename, sizeof(filename), "output/%06d.png", b + 1);
-		image_save(image, filename);
-		image_destroy(image);
-	}
+	image = image_from_tensor(tensor, 0);
+	snprintf(filename, sizeof(filename), "output/%06d.png", index);
+	image_save(image, filename);
+	image_destroy(image);
 
 	return RET_OK;
 }
 
 
-TENSOR *color_onnxrpc(int socket, TENSOR *send_tensor)
+TENSOR *color_onnxrpc(int socket, TENSOR *send_tensor, int reqcode)
 {
-	int nh, nw, rescode;
-	TENSOR *resize_send, *resize_recv, *recv_tensor;
+	int rescode;
+	TENSOR *recv_tensor;
 
 	CHECK_TENSOR(send_tensor);
-
-	// server limited: only accept 4 times tensor !!!
-	nh = (send_tensor->height + 7)/8; nh *= 8;
-	nw = (send_tensor->width + 7)/8; nw *= 8;
-
-	if (send_tensor->height == nh && send_tensor->width == nw) {
-		// Normal onnx RPC
-		recv_tensor = OnnxRPC(socket, send_tensor, VIDEO_COLOR_REQCODE, &rescode);
-	} else {
-		resize_send = tensor_zoom(send_tensor, nh, nw); CHECK_TENSOR(resize_send);
-		resize_recv = OnnxRPC(socket, resize_send, VIDEO_COLOR_REQCODE, &rescode);
-		recv_tensor = tensor_zoom(resize_recv, send_tensor->height, send_tensor->width);
-		tensor_destroy(resize_recv);
-		tensor_destroy(resize_send);
-	}
-
+	recv_tensor = OnnxRPC(socket, send_tensor, reqcode, &rescode);
 	return recv_tensor;
-}
-
-
-int color(int socket, char *input_file1, char *input_file2)
-{
-	TENSOR *send_tensor, *recv_tensor;
-
-	printf("Video coloring between %s and %s ...\n", input_file1, input_file2);
-
-	send_tensor = color_load(input_file1, input_file2);
-	check_tensor(send_tensor);
-
-	recv_tensor = color_onnxrpc(socket, send_tensor);
-	if (tensor_valid(recv_tensor)) {
-		color_save(recv_tensor);
-		tensor_destroy(recv_tensor);
-	}
-
-	tensor_destroy(send_tensor);
-
-	return RET_OK;
 }
 
 void help(char *cmd)
 {
-	printf("Usage: %s [option] <image files>\n", cmd);
+	printf("Usage: %s [option] <reference color gray images>\n", cmd);
 	printf("    h, --help                   Display this help.\n");
 	printf("    e, --endpoint               Set endpoint.\n");
 	printf("    s, --server <0 | 1>         Start server (use gpu).\n");
@@ -209,6 +168,8 @@ int main(int argc, char **argv)
 	int use_gpu = 1;
 	int running_server = 0;
 	int socket;
+	int reqcode;
+	TENSOR *send_tensor, *recv_tensor;
 
 	int option_index = 0;
 	char *endpoint = (char *) VIDEO_COLOR_URL;
@@ -246,8 +207,23 @@ int main(int argc, char **argv)
 		if ((socket = client_open(endpoint)) < 0)
 			return RET_ERROR;
 
-		for (i = optind; i + 1 < argc; i++)
-			color(socket, argv[i], argv[i + 1]);
+		for (i = optind; i < argc; i++) {
+			if (i == optind)
+				printf("Video reference file %s ...\n", argv[i]);
+			else
+				printf("Video coloring file %s ...\n", argv[i]);
+
+			reqcode = (i == optind)? VIDEO_REFERENCE_REQCODE : VIDEO_COLOR_REQCODE;
+			send_tensor = color_load(argv[i]);
+
+			if (tensor_valid(send_tensor)) {
+				recv_tensor = color_onnxrpc(socket, send_tensor, reqcode);
+				if (i > optind && tensor_valid(recv_tensor))
+					color_save(recv_tensor, i - optind);
+				tensor_destroy(recv_tensor);
+				tensor_destroy(send_tensor);
+			}
+		}
 
 		client_close(socket);
 		return RET_OK;
