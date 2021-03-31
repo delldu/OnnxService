@@ -231,10 +231,11 @@ int ColorService(char *endpoint, int use_gpu)
 			tensor_destroy(reference_lab512_tensor);
 			reference_lab512_tensor = rgb2lab(reference_rgb512_tensor);
 
+			// Init last_lab512_tensor
 			tensor_destroy(last_lab512_tensor);
 			last_lab512_tensor = tensor_create(1, 3, 512, 512);
 			check_tensor(last_lab512_tensor);
-			memset(last_lab512_tensor->data, 0, 1 * 3 * 512 * 512 * sizeof(float));
+			tensor_zero(last_lab512_tensor);
 
 			// Respone echo input_tensor ...
 			response_send(socket, input_tensor, VIDEO_REFERENCE_REQCODE);
