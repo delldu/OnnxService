@@ -21,20 +21,176 @@
 #define VIDEO_REFERENCE_REQCODE 0x0212
 // #define VIDEO_COLOR_URL "ipc:///tmp/video_color.ipc"
 #define VIDEO_COLOR_URL "tcp://127.0.0.1:9202"
-TENSOR *reference_rgb_tensor = NULL;
-TENSOR *reference_lab_tensor = NULL;
+TENSOR *reference_rgb512_tensor = NULL;
+TENSOR *reference_lab512_tensor = NULL;
+TENSOR *last_lab512_tensor = NULL;
 
-TENSOR *color_do(OrtEngine *align, OrtEngine *color, TENSOR *input_tensor)
+// input: rgb,  r, g, b in [0.0, 1.0]
+// output: lab, L in [-50, 50], ab in [-110, 110]
+TENSOR *rgb2lab(TENSOR *rgb)
 {
-	TENSOR *output_tensor = NULL;
+	int i, n, b;
+	TENSOR *lab;
+	float *RC, *GC, *BC, *LC, *aC, *bC;	// Channels
+	BYTE R, G, B;
+	float fL, fa, fb;
+
+	CHECK_TENSOR(rgb);
+	if (rgb->chan < 3) {
+		syslog_error("Tensor channels < 3");
+		return NULL;
+	}
+
+	lab = tensor_create(rgb->batch, 3, rgb->height, rgb->width);
+	CHECK_TENSOR(lab);
+	for (b = 0; b < rgb->batch; b++) {
+		RC = tensor_start_chan(rgb, b, 0);
+		GC = tensor_start_chan(rgb, b, 1);
+		BC = tensor_start_chan(rgb, b, 2);
+
+		LC = tensor_start_chan(lab, b, 0);
+		aC = tensor_start_chan(lab, b, 1);
+		bC = tensor_start_chan(lab, b, 2);
+
+		n = rgb->height * rgb->width;
+		for (i = 0; i < n; i++) {
+			// void color_rgb2lab(BYTE R, BYTE G, BYTE B, float *L, float *a, float *b);
+			R =(BYTE)(*RC * 255.0); G =(BYTE)(*GC * 255.0); B =(BYTE)(*BC * 255.0); 
+			color_rgb2lab(R, G, B, &fL, &fa, &fb);
+			fL -= 50;
+			*LC = fL; *aC = fa; *bC = fb;
+
+			RC++; GC++; BC++;
+			LC++; aC++; bC++;
+		}
+	}
+
+	return lab;	// L in [-50, 50], ab in [-110, 110]
+}
+
+// input: lab, L in [-50, 50], ab in [-110, 110]
+// output: rgb,  r, g, b in [0.0, 1.0]
+TENSOR *lab2rgb(TENSOR *lab)
+{
+	int i, n, b;
+	TENSOR *rgb;
+	float *RC, *GC, *BC, *LC, *aC, *bC;	// Channels
+	BYTE R, G, B;
+	float fL, fa, fb;
+
+	CHECK_TENSOR(lab);
+	if (lab->chan < 3) {
+		syslog_error("Tensor channels < 3");
+		return NULL;
+	}
+
+	rgb = tensor_create(lab->batch, 3, lab->height, lab->width);
+	CHECK_TENSOR(rgb);
+	for (b = 0; b < rgb->batch; b++) {
+		LC = tensor_start_chan(lab, b, 0);
+		aC = tensor_start_chan(lab, b, 1);
+		bC = tensor_start_chan(lab, b, 2);
+
+		RC = tensor_start_chan(rgb, b, 0);
+		GC = tensor_start_chan(rgb, b, 1);
+		BC = tensor_start_chan(rgb, b, 2);
+
+		n = lab->height * lab->width;
+		for (i = 0; i < n; i++) {
+			fL = *LC; fa = *aC; fb = *bC; fL += 50.0;
+			color_lab2rgb(fL, fa, fb, &R, &G, &B);
+			*RC = (float)R/255.0; *GC = (float)G/255.0; *BC = (float)B/255.0;
+			LC++; aC++; bC++;
+			RC++; GC++; BC++;
+		}
+	}
+
+	return rgb;
+}
+
+TENSOR *color_do(OrtEngine *align_engine, OrtEngine *color_engine, TENSOR *input_tensor)
+{
+	TENSOR *array[8];
+	TENSOR *output_tensor, *input_lab512_tensor, *input_lab512_tensor_L;
 
 	CHECK_TENSOR(input_tensor);
-	CheckEngine(align);
-	CheckEngine(color);
+	CheckEngine(align_engine);
+	CheckEngine(color_engine);
 
-	output_tensor = tensor_copy(input_tensor);
+	TENSOR *input_rgb512_tensor = tensor_zoom(input_tensor, 512, 512);
+	CHECK_TENSOR(input_rgb512_tensor);
+	input_lab512_tensor = rgb2lab(input_rgb512_tensor);
+	CHECK_TENSOR(input_lab512_tensor);
+	input_lab512_tensor_L = tensor_slice_chan(input_lab512_tensor, 0, 1);
+	CHECK_TENSOR(input_lab512_tensor_L);
 
-	return output_tensor;
+    // align_input = torch.cat((B_lab, lab2rgb(A_lab),lab2rgb(B_lab)), dim=1)
+    // align_output = align_model(align_input)
+	array[0] = reference_lab512_tensor;
+	array[1] = input_rgb512_tensor;
+	array[2] = reference_rgb512_tensor;
+	TENSOR *align_input = tensor_stack_chan(3, array);
+	CHECK_TENSOR(align_input);
+	tensor_destroy(input_rgb512_tensor);
+
+	TENSOR *align_output = TensorForward(align_engine, align_input);
+	CHECK_TENSOR(align_output);
+	tensor_destroy(align_input);
+
+    // color_input = torch.cat((A_lab[:, 0:1, :, :], global_lab[:, 1:3, :, :], similarity, A_last_lab), dim=1)
+    // color_output = color_model(color_input)
+	TENSOR *global_ab = tensor_slice_chan(align_output, 1, 3);	// 2 channels
+	CHECK_TENSOR(global_ab);
+	TENSOR *similarity = tensor_slice_chan(align_output, 3, 4);	// 1 channel
+	CHECK_TENSOR(similarity);
+	tensor_destroy(align_output);
+
+	array[0] = input_lab512_tensor_L;
+	array[1] = global_ab;
+	array[2] = similarity;
+	array[3] = last_lab512_tensor;
+	TENSOR *color_input = tensor_stack_chan(4, array);
+	CHECK_TENSOR(color_input);
+
+	TENSOR *color_output = TensorForward(color_engine, color_input);
+
+	CHECK_TENSOR(color_output);		// only ab channels
+	tensor_destroy(global_ab);
+	tensor_destroy(similarity);
+	tensor_destroy(color_input);
+
+    // current_ab_predict = double_size(color_output)
+    // predict_rgb = lab2rgb(torch.cat((current_lab[:, 0:1, :, :], current_ab_predict), dim = 1))
+	TENSOR *predict_ab = tensor_zoom(color_output, input_tensor->height, input_tensor->width);
+	CHECK_TENSOR(predict_ab);
+	TENSOR *current_lab = rgb2lab(input_tensor);
+	CHECK_TENSOR(current_lab);
+
+	TENSOR *current_lab_l = tensor_slice_chan(current_lab, 0, 1);
+	CHECK_TENSOR(current_lab_l);
+	array[0] = current_lab_l;
+	array[1] = predict_ab;
+	output_tensor = tensor_stack_chan(2, array);
+
+	tensor_destroy(current_lab_l);
+	tensor_destroy(current_lab);
+	tensor_destroy(predict_ab);
+
+    // last_lab512_tensor = torch.cat((A_lab[:, 0:1, :, :], color_output), dim=1)
+	tensor_destroy(last_lab512_tensor);
+	array[0] = input_lab512_tensor_L;
+	array[1] = color_output;
+	last_lab512_tensor = tensor_stack_chan(2, array);
+	CHECK_TENSOR(last_lab512_tensor);
+
+	tensor_destroy(color_output);
+	tensor_destroy(input_lab512_tensor_L);
+	tensor_destroy(input_rgb512_tensor);
+
+	TENSOR *output_rgb_tensor = lab2rgb(output_tensor);
+	tensor_destroy(output_tensor);
+
+	return output_rgb_tensor;
 }
 
 int ColorService(char *endpoint, int use_gpu)
@@ -69,11 +225,16 @@ int ColorService(char *endpoint, int use_gpu)
 
 		if (reqcode == VIDEO_REFERENCE_REQCODE) {
 			// Save tensor to global reference tensor
-			tensor_destroy(reference_rgb_tensor);
-			reference_rgb_tensor = tensor_zoom(reference_rgb_tensor, 512, 512);
+			tensor_destroy(reference_rgb512_tensor);
+			reference_rgb512_tensor = tensor_zoom(input_tensor, 512, 512);
 
-			// tensor_destroy(reference_lab_tensor);
-			// reference_lab_tensor = tensor_rgb2lab(reference_rgb_tensor);
+			tensor_destroy(reference_lab512_tensor);
+			reference_lab512_tensor = rgb2lab(reference_rgb512_tensor);
+
+			tensor_destroy(last_lab512_tensor);
+			last_lab512_tensor = tensor_create(1, 3, 512, 512);
+			check_tensor(last_lab512_tensor);
+			memset(last_lab512_tensor->data, 0, 1 * 3 * 512 * 512 * sizeof(float));
 
 			// Respone echo input_tensor ...
 			response_send(socket, input_tensor, VIDEO_REFERENCE_REQCODE);
@@ -99,8 +260,8 @@ int ColorService(char *endpoint, int use_gpu)
 		lambda++;
 	}
 
-	tensor_destroy(reference_lab_tensor);
-	tensor_destroy(reference_rgb_tensor);
+	tensor_destroy(reference_lab512_tensor);
+	tensor_destroy(reference_rgb512_tensor);
 
 	DestroyEngine(color_engine);
 	DestroyEngine(align_engine);
@@ -209,7 +370,7 @@ int main(int argc, char **argv)
 
 		for (i = optind; i < argc; i++) {
 			if (i == optind)
-				printf("Video reference file %s ...\n", argv[i]);
+				printf("Video send reference file %s ...\n", argv[i]);
 			else
 				printf("Video coloring file %s ...\n", argv[i]);
 
