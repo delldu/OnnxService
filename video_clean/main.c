@@ -22,11 +22,6 @@
 #define VIDEO_CLEAN_URL "tcp://127.0.0.1:9201"
 
 
-TENSOR *clean_do(OrtEngine *clean_engine, TENSOR *input_tensor)
-{
-	return NULL;
-}
-
 int ColorService(char *endpoint, int use_gpu)
 {
 	int socket, reqcode, lambda, rescode;
@@ -56,7 +51,7 @@ int ColorService(char *endpoint, int use_gpu)
 
 		// Real service ...
 		time_reset();
-		output_tensor = clean_do(clean_engine, input_tensor);
+		output_tensor = TensorForward(clean_engine, input_tensor);
 		time_spend((char *)"Infer");
 
 		if (tensor_valid(output_tensor)) {
@@ -69,9 +64,6 @@ int ColorService(char *endpoint, int use_gpu)
 
 		lambda++;
 	}
-
-	tensor_destroy(reference_lab512_tensor);
-	tensor_destroy(reference_rgb512_tensor);
 
 	DestroyEngine(clean_engine);
 
@@ -86,16 +78,37 @@ int server(char *endpoint, int use_gpu)
 	return ColorService(endpoint, use_gpu);
 }
 
-TENSOR *clean_load(char *filename)
+TENSOR *clean_load(int n, char *filenames[])
 {
+	int i, len;
 	IMAGE *image;
-	TENSOR *tensor;
+	TENSOR *tensors[6], *output;
 
-	image = image_load(filename); CHECK_IMAGE(image);
-	tensor = tensor_from_image(image, 0 /* without alpha */);
-	image_destroy(image);
+	if (n < 5) {
+		syslog_error("At least 5 frames at same time.");
+		return NULL;
+	}
 
-	return tensor;
+	for (i = 0; i < 5; i++) {
+		image = image_load(filenames[i]);
+		CHECK_IMAGE(image);
+		tensors[i] = tensor_from_image(image, 0 /* without alpha */);
+		CHECK_TENSOR(tensors[i]);
+	}
+
+	// Make noise
+	tensors[5] = tensor_create(1, 1, tensors[0]->height, tensors[0]->width);
+	len = 1 * 1 * tensors[0]->height * tensors[0]->width;
+	for (i = 0; i < len; i++) {
+		tensors[5]->data[i] = 0.05;
+	}
+
+	output = tensor_stack_chan(6, tensors);
+
+	for (i = 0; i < 6; i++)
+		tensor_destroy(tensors[i]);
+
+	return output;
 }
 
 int clean_save(TENSOR *tensor, int index)
@@ -138,7 +151,6 @@ int main(int argc, char **argv)
 	int use_gpu = 1;
 	int running_server = 0;
 	int socket;
-	int reqcode;
 	TENSOR *send_tensor, *recv_tensor;
 
 	int option_index = 0;
@@ -177,12 +189,13 @@ int main(int argc, char **argv)
 		if ((socket = client_open(endpoint)) < 0)
 			return RET_ERROR;
 
-		for (i = optind; i < argc; i++) {
+		for (i = optind; i + 4 < argc; i++) {
 			printf("Video cleaning file %s ...\n", argv[i]);
 
+			send_tensor = clean_load(5, &argv[i]);
 			if (tensor_valid(send_tensor)) {
 				recv_tensor = clean_onnxrpc(socket, send_tensor, VIDEO_CLEAN_REQCODE);
-				clean_save(recv_tensor, i - optind);
+				clean_save(recv_tensor, i - optind + 3);
 				tensor_destroy(recv_tensor);
 				tensor_destroy(send_tensor);
 			}
