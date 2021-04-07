@@ -105,7 +105,7 @@ int main(int argc, char **argv)
 		if ((socket = client_open(endpoint)) < 0)
 			return RET_ERROR;
 
-		for (i = 1; i < argc; i++)
+		for (i = optind; i < argc; i++)
 			zoom(socket, argv[i]);
 
 		client_close(socket);
