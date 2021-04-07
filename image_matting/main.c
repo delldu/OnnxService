@@ -21,6 +21,7 @@
 // #define IMAGE_MATTING_URL "ipc:///tmp/image_matting.ipc"
 #define IMAGE_MATTING_URL "tcp://127.0.0.1:9107"
 
+
 int normal_input(TENSOR *tensor)
 {
 	int i, j;
@@ -43,16 +44,16 @@ int normal_input(TENSOR *tensor)
 	}
 
 	// Change RGB To BGR
-	tensor_R = tensor_start_chan(tensor, 0 /*batch*/, 0 /*channel */);
-	tensor_B = tensor_start_chan(tensor, 0 /*batch*/, 2 /*channel */);
-	for (i = 0; i < tensor->height; i++) {
-		for (j = 0; j < tensor->width; j++) {
-			d = *tensor_B;
-			*tensor_B = *tensor_R;
-			*tensor_R = d;
-			tensor_R++; tensor_B++;
-		}
-	}
+	// tensor_R = tensor_start_chan(tensor, 0 /*batch*/, 0 /*channel */);
+	// tensor_B = tensor_start_chan(tensor, 0 /*batch*/, 2 /*channel */);
+	// for (i = 0; i < tensor->height; i++) {
+	// 	for (j = 0; j < tensor->width; j++) {
+	// 		d = *tensor_B;
+	// 		*tensor_B = *tensor_R;
+	// 		*tensor_R = d;
+	// 		tensor_R++; tensor_B++;
+	// 	}
+	// }
 
 	return RET_OK;
 }
@@ -84,10 +85,6 @@ int normal_output(TENSOR *tensor)
 		for (i = 0; i < size; i++, data++) {
 			d = *data - min;
 			d /= max;
-			if (d < 0.f)
-				d = 0.f;
-			if (d > 1.f)
-				d = 1.f;
 			*data = d;
 		}
 	}
@@ -105,9 +102,16 @@ TENSOR *matting_onnxrpc(int socket, TENSOR *send_tensor)
 
 	resize_send = resize_recv = recv_tensor = NULL;	// avoid compile complaint
 
-	// Matting server limited: only accept 320x320 !!!
-	nh = 320;
-	nw = 320;
+	// Matting server limited: only accept 4 times tensor !!!
+	nh = (send_tensor->height + 3)/4; nh *= 4;
+	nw = (send_tensor->width + 3)/4; nw *= 4;
+	
+	// Limited memory !!!
+	while(nh > 512)
+		nh /= 2;
+	while (nw > 512)
+		nw /= 2;
+
 	if (send_tensor->height == nh && send_tensor->width == nw) {
 		// Normal onnx RPC
 		normal_input(send_tensor);
@@ -136,22 +140,18 @@ int server(char *endpoint, int use_gpu)
 int blend_mask(IMAGE *source_image, TENSOR *mask_tensor)
 {
 	int i, j;
-	float *mask_A;
+	float *mask_A, alpha;
 
 	check_image(source_image);
 	check_tensor(mask_tensor);
 
 	mask_A = tensor_start_chan(mask_tensor, 0 /* batch */, 0 /* channel */);
 	image_foreach(source_image, i, j) {
-		if (*mask_A < 0.50) {
-			// Green screen
-			source_image->ie[i][j].r = 0;
-			source_image->ie[i][j].g = 255;
-			source_image->ie[i][j].b = 0;
-			source_image->ie[i][j].a = 0;
-		} else {
-			source_image->ie[i][j].a = 255;
-		}
+		alpha = *mask_A;
+		source_image->ie[i][j].r = (BYTE)(alpha * source_image->ie[i][j].r + (1 - alpha)*0);
+		source_image->ie[i][j].g = (BYTE)(alpha * source_image->ie[i][j].g + (1 - alpha)*255);
+		source_image->ie[i][j].b = (BYTE)(alpha * source_image->ie[i][j].b + (1 - alpha)*0);
+		source_image->ie[i][j].a = 255;
 		mask_A++;
 	}
 
@@ -238,7 +238,7 @@ int main(int argc, char **argv)
 		if ((socket = client_open(endpoint)) < 0)
 			return RET_ERROR;
 
-		for (i = 1; i < argc; i++)
+		for (i = optind; i < argc; i++)
 			matting(socket, argv[i]);
 
 		client_close(socket);
