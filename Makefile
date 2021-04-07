@@ -16,7 +16,10 @@ XSUBDIRS :=  \
 	image_clean \
 	image_light \
 	image_matting \
-	image_facegan
+	image_facegan \
+	video_clean \
+	video_color \
+	video_slow
 
 
 BSUBDIRS :=

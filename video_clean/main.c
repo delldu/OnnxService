@@ -195,7 +195,7 @@ int main(int argc, char **argv)
 			send_tensor = clean_load(5, &argv[i]);
 			if (tensor_valid(send_tensor)) {
 				recv_tensor = clean_onnxrpc(socket, send_tensor, VIDEO_CLEAN_REQCODE);
-				clean_save(recv_tensor, i - optind + 3);
+				clean_save(recv_tensor, i - optind + 1);
 				tensor_destroy(recv_tensor);
 				tensor_destroy(send_tensor);
 			}

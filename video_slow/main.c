@@ -91,7 +91,7 @@ TENSOR *slow_do(OrtEngine *fc, OrtEngine *at, TENSOR *input_tensor, int scale)
 
 	// Suppose_X: input is 1x6xHxW input !!!
 	if (input_tensor->batch != 1 || input_tensor->chan != 6) {
-		syslog_error("NOW Only support 1x3xHxW input tensor.");
+		syslog_error("Now only support 1x3xHxW input tensor.");
 		return NULL;
 	}
 
