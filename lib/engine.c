@@ -22,6 +22,15 @@
 // ONNX Runtime Engine
 #define MAKE_FOURCC(a,b,c,d) (((DWORD)(a) << 24) | ((DWORD)(b) << 16) | ((DWORD)(c) << 8) | ((DWORD)(d) << 0))
 #define ENGINE_MAGIC MAKE_FOURCC('O', 'N', 'R', 'T')
+
+extern void CheckStatus(OrtStatus * status);
+extern OrtValue *CreateOrtTensor(TENSOR * tensor, int gpu);
+extern OrtValue *SimpleForward(OrtEngine * engine, OrtValue * input_tensor);
+extern int ValidOrtTensor(OrtValue * tensor);
+extern size_t OrtTensorDimensions(OrtValue * tensor, int64_t * dims);
+extern float *OrtTensorValues(OrtValue * tensor);
+extern void DestroyOrtTensor(OrtValue * tensor);
+
 const OrtApi *onnx_runtime_api = OrtGetApiBase()->GetApi(ORT_API_VERSION);
 
 
@@ -353,12 +362,12 @@ int OnnxService(char *endpoint, char *onnx_file, int use_gpu)
 			syslog_error("Request recv bad tensor ...");
 			continue;
 		}
-		syslog_info("Request Code = %d", reqcode);
+		syslog_info("Request Code = 0x%x", reqcode);
 
 		// Real service ...
 		time_reset();
 		output_tensor = TensorForward(engine, input_tensor);
-		time_spend((char *)"Infer");
+		time_spend((char *)"Predict");
 
 		if (tensor_valid(output_tensor)) {
 			rescode = reqcode;

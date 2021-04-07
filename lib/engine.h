@@ -25,8 +25,8 @@ typedef struct {
 	OrtSession *session;
 	OrtSessionOptions *session_options;
 
-	 std::vector < const char *>input_node_names;
-	 std::vector < const char *>output_node_names;
+	std::vector < const char *>input_node_names;
+	std::vector < const char *>output_node_names;
 } OrtEngine;
 
 #define CheckEngine(e) \
@@ -37,17 +37,8 @@ typedef struct {
             } \
     } while(0)
 
-void CheckStatus(OrtStatus * status);
-
-OrtValue *CreateOrtTensor(TENSOR * tensor, int gpu);
-int ValidOrtTensor(OrtValue * tensor);
-size_t OrtTensorDimensions(OrtValue * tensor, int64_t * dims);
-float *OrtTensorValues(OrtValue * tensor);
-void DestroyOrtTensor(OrtValue * tensor);
-
 OrtEngine *CreateEngine(const char *model_path, int use_gpu);
 int ValidEngine(OrtEngine * engine);
-OrtValue *SimpleForward(OrtEngine * engine, OrtValue * input_tensor);
 TENSOR *TensorForward(OrtEngine * engine, TENSOR * input);
 void DestroyEngine(OrtEngine * engine);
 
