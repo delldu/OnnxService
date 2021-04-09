@@ -400,6 +400,55 @@ TENSOR *OnnxRPC(int socket, TENSOR * input, int reqcode, int *rescode)
 	return output;
 }
 
+TENSOR *ResizeOnnxRPC(int socket, TENSOR *send_tensor, int reqcode, int *rescode, int multiples)
+{
+	int nh, nw;
+	TENSOR *resize_send, *resize_recv, *recv_tensor;
+
+	CHECK_TENSOR(send_tensor);
+
+	nh = (send_tensor->height + multiples - 1)/multiples; nh *= multiples;
+	nw = (send_tensor->width + multiples - 1)/multiples; nw *= multiples;
+
+	if (send_tensor->height == nh && send_tensor->width == nw) {
+		// Normal onnx RPC
+		recv_tensor = OnnxRPC(socket, send_tensor, reqcode, rescode);
+	} else {
+		resize_send = tensor_zoom(send_tensor, nh, nw); CHECK_TENSOR(resize_send);
+		resize_recv = OnnxRPC(socket, resize_send, reqcode, rescode);
+		recv_tensor = tensor_zoom(resize_recv, send_tensor->height, send_tensor->width);
+		tensor_destroy(resize_recv);
+		tensor_destroy(resize_send);
+	}
+
+	return recv_tensor;
+}
+
+TENSOR *ZeropadOnnxRPC(int socket, TENSOR *send_tensor, int reqcode, int *rescode, int multiples)
+{
+	int nh, nw;
+	TENSOR *resize_send, *resize_recv, *recv_tensor;
+
+	CHECK_TENSOR(send_tensor);
+
+	nh = (send_tensor->height + multiples - 1)/multiples; nh *= multiples;
+	nw = (send_tensor->width + multiples - 1)/multiples; nw *= multiples;
+
+	if (send_tensor->height == nh && send_tensor->width == nw) {
+		// Normal onnx RPC
+		recv_tensor = OnnxRPC(socket, send_tensor, reqcode, rescode);
+	} else {
+		resize_send = tensor_zeropad(send_tensor, nh, nw); CHECK_TENSOR(resize_send);
+		resize_recv = OnnxRPC(socket, resize_send, reqcode, rescode);
+		recv_tensor = tensor_zeropad(resize_recv, send_tensor->height, send_tensor->width);
+		tensor_destroy(resize_recv);
+		tensor_destroy(resize_send);
+	}
+
+	return recv_tensor;
+}
+
+
 void SaveOutputImage(IMAGE *image, char *filename)
 {
 	char output_filename[256], *p;

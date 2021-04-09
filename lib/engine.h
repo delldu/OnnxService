@@ -43,7 +43,10 @@ TENSOR *TensorForward(OrtEngine * engine, TENSOR * input);
 void DestroyEngine(OrtEngine * engine);
 
 int OnnxService(char *endpoint, char *onnx_file, int use_gpu);
+
 TENSOR *OnnxRPC(int socket, TENSOR * input, int reqcode, int *rescode);
+TENSOR *ResizeOnnxRPC(int socket, TENSOR *send_tensor, int reqcode, int *rescode, int multiples);
+TENSOR *ZeropadOnnxRPC(int socket, TENSOR *send_tensor, int reqcode, int *rescode, int multiples);
 
 void SaveOutputImage(IMAGE *image, char *filename);
 void SaveTensorAsImage(TENSOR *tensor, char *filename);

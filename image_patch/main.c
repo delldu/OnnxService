@@ -26,9 +26,16 @@ int server(char *endpoint, int use_gpu)
 	return OnnxService(endpoint, (char *)"image_patch.onnx", use_gpu);
 }
 
-int patch(int socket, char *input_file)
+TENSOR *patch_onnxrpc(int socket, TENSOR *send_tensor)
 {
 	int rescode;
+	CHECK_TENSOR(send_tensor);
+	// Server only accept 128 times 
+	return ZeropadOnnxRPC(socket, send_tensor, IMAGE_PATCH_REQCODE, &rescode, 128);
+}
+
+int patch(int socket, char *input_file)
+{
 	IMAGE *send_image;
 	TENSOR *send_tensor, *recv_tensor;
 
@@ -40,7 +47,7 @@ int patch(int socket, char *input_file)
 		send_tensor = tensor_from_image(send_image, 1);	// with alpha
 		check_tensor(send_tensor);
 
-		recv_tensor = OnnxRPC(socket, send_tensor, IMAGE_PATCH_REQCODE, &rescode);
+		recv_tensor = patch_onnxrpc(socket, send_tensor);
 		if (tensor_valid(recv_tensor)) {
 			SaveTensorAsImage(recv_tensor, input_file);
 			tensor_destroy(recv_tensor);
@@ -105,7 +112,7 @@ int main(int argc, char **argv)
 		if ((socket = client_open(endpoint)) < 0)
 			return RET_ERROR;
 
-		for (i = 1; i < argc; i++)
+		for (i = optind; i < argc; i++)
 			patch(socket, argv[i]);
 
 		client_close(socket);
