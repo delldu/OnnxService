@@ -124,17 +124,6 @@ int clean_save(TENSOR *tensor, int index)
 	return RET_OK;
 }
 
-
-TENSOR *clean_onnxrpc(int socket, TENSOR *send_tensor, int reqcode)
-{
-	int rescode;
-	TENSOR *recv_tensor;
-
-	CHECK_TENSOR(send_tensor);
-	recv_tensor = OnnxRPC(socket, send_tensor, reqcode, &rescode);
-	return recv_tensor;
-}
-
 void help(char *cmd)
 {
 	printf("Usage: %s [option] <images>\n", cmd);
@@ -194,7 +183,7 @@ int main(int argc, char **argv)
 
 			send_tensor = clean_load(5, &argv[i]);
 			if (tensor_valid(send_tensor)) {
-				recv_tensor = clean_onnxrpc(socket, send_tensor, VIDEO_CLEAN_REQCODE);
+				recv_tensor = OnnxRPC(socket, send_tensor, VIDEO_CLEAN_REQCODE);
 				clean_save(recv_tensor, i - optind + 1);
 				tensor_destroy(recv_tensor);
 				tensor_destroy(send_tensor);

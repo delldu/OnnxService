@@ -21,9 +21,6 @@ XSUBDIRS :=  \
 	video_color \
 	video_slow
 
-
-BSUBDIRS :=
-
 all:
 	@for d in $(XSUBDIRS)  ; do \
 		if [ -d $$d ] ; then \

@@ -303,17 +303,6 @@ int color_save(TENSOR *tensor, int index)
 	return RET_OK;
 }
 
-
-TENSOR *color_onnxrpc(int socket, TENSOR *send_tensor, int reqcode)
-{
-	int rescode;
-	TENSOR *recv_tensor;
-
-	CHECK_TENSOR(send_tensor);
-	recv_tensor = OnnxRPC(socket, send_tensor, reqcode, &rescode);
-	return recv_tensor;
-}
-
 void help(char *cmd)
 {
 	printf("Usage: %s [option] <reference color gray images>\n", cmd);
@@ -379,7 +368,7 @@ int main(int argc, char **argv)
 			send_tensor = color_load(argv[i]);
 
 			if (tensor_valid(send_tensor)) {
-				recv_tensor = color_onnxrpc(socket, send_tensor, reqcode);
+				recv_tensor = OnnxRPC(socket, send_tensor, reqcode);
 				if (i > optind && tensor_valid(recv_tensor))
 					color_save(recv_tensor, i - optind);
 				tensor_destroy(recv_tensor);

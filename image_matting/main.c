@@ -25,7 +25,7 @@
 int normal_input(TENSOR *tensor)
 {
 	int i, j;
-	float *tensor_R, *tensor_G, *tensor_B, d;
+	float *tensor_R, *tensor_G, *tensor_B;
 
 	check_tensor(tensor);
 
@@ -95,7 +95,7 @@ int normal_output(TENSOR *tensor)
 
 TENSOR *matting_onnxrpc(int socket, TENSOR *send_tensor)
 {
-	int nh, nw, rescode;
+	int nh, nw;
 	TENSOR *resize_send, *resize_recv, *recv_tensor;
 
 	CHECK_TENSOR(send_tensor);
@@ -115,13 +115,13 @@ TENSOR *matting_onnxrpc(int socket, TENSOR *send_tensor)
 	if (send_tensor->height == nh && send_tensor->width == nw) {
 		// Normal onnx RPC
 		normal_input(send_tensor);
-		recv_tensor = OnnxRPC(socket, send_tensor, IMAGE_MATTING_REQCODE, &rescode);
+		recv_tensor = OnnxRPC(socket, send_tensor, IMAGE_MATTING_REQCODE);
 		normal_output(recv_tensor);
 	} else {
 		resize_send = tensor_zoom(send_tensor, nh, nw); CHECK_TENSOR(resize_send);
 
 		normal_input(resize_send);
-		resize_recv = OnnxRPC(socket, resize_send, IMAGE_MATTING_REQCODE, &rescode);
+		resize_recv = OnnxRPC(socket, resize_send, IMAGE_MATTING_REQCODE);
 		normal_output(resize_recv);
 
 		recv_tensor = tensor_zoom(resize_recv, send_tensor->height, send_tensor->width);

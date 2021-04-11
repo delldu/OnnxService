@@ -387,20 +387,21 @@ int OnnxService(char *endpoint, char *onnx_file, int use_gpu)
 	return RET_OK;
 }
 
-TENSOR *OnnxRPC(int socket, TENSOR * input, int reqcode, int *rescode)
+TENSOR *OnnxRPC(int socket, TENSOR * input, int reqcode)
 {
+	int rescode;
 	TENSOR *output = NULL;
 
 	CHECK_TENSOR(input);
 
 	if (request_send(socket, reqcode, input) == RET_OK) {
-		output = response_recv(socket, rescode);
+		output = response_recv(socket, &rescode);
 	}
 
 	return output;
 }
 
-TENSOR *ResizeOnnxRPC(int socket, TENSOR *send_tensor, int reqcode, int *rescode, int multiples)
+TENSOR *ResizeOnnxRPC(int socket, TENSOR *send_tensor, int reqcode, int multiples)
 {
 	int nh, nw;
 	TENSOR *resize_send, *resize_recv, *recv_tensor;
@@ -412,10 +413,10 @@ TENSOR *ResizeOnnxRPC(int socket, TENSOR *send_tensor, int reqcode, int *rescode
 
 	if (send_tensor->height == nh && send_tensor->width == nw) {
 		// Normal onnx RPC
-		recv_tensor = OnnxRPC(socket, send_tensor, reqcode, rescode);
+		recv_tensor = OnnxRPC(socket, send_tensor, reqcode);
 	} else {
 		resize_send = tensor_zoom(send_tensor, nh, nw); CHECK_TENSOR(resize_send);
-		resize_recv = OnnxRPC(socket, resize_send, reqcode, rescode);
+		resize_recv = OnnxRPC(socket, resize_send, reqcode);
 		recv_tensor = tensor_zoom(resize_recv, send_tensor->height, send_tensor->width);
 		tensor_destroy(resize_recv);
 		tensor_destroy(resize_send);
@@ -424,7 +425,7 @@ TENSOR *ResizeOnnxRPC(int socket, TENSOR *send_tensor, int reqcode, int *rescode
 	return recv_tensor;
 }
 
-TENSOR *ZeropadOnnxRPC(int socket, TENSOR *send_tensor, int reqcode, int *rescode, int multiples)
+TENSOR *ZeropadOnnxRPC(int socket, TENSOR *send_tensor, int reqcode, int multiples)
 {
 	int nh, nw;
 	TENSOR *resize_send, *resize_recv, *recv_tensor;
@@ -436,10 +437,10 @@ TENSOR *ZeropadOnnxRPC(int socket, TENSOR *send_tensor, int reqcode, int *rescod
 
 	if (send_tensor->height == nh && send_tensor->width == nw) {
 		// Normal onnx RPC
-		recv_tensor = OnnxRPC(socket, send_tensor, reqcode, rescode);
+		recv_tensor = OnnxRPC(socket, send_tensor, reqcode);
 	} else {
 		resize_send = tensor_zeropad(send_tensor, nh, nw); CHECK_TENSOR(resize_send);
-		resize_recv = OnnxRPC(socket, resize_send, reqcode, rescode);
+		resize_recv = OnnxRPC(socket, resize_send, reqcode);
 		recv_tensor = tensor_zeropad(resize_recv, send_tensor->height, send_tensor->width);
 		tensor_destroy(resize_recv);
 		tensor_destroy(resize_send);

@@ -336,33 +336,6 @@ int slow_save(TENSOR *tensor)
 	return RET_OK;
 }
 
-
-TENSOR *slow_onnxrpc(int socket, TENSOR *send_tensor)
-{
-	int nh, nw, rescode;
-	TENSOR *resize_send, *resize_recv, *recv_tensor;
-
-	CHECK_TENSOR(send_tensor);
-
-	// server limited: only accept 4 times tensor !!!
-	nh = (send_tensor->height + 7)/8; nh *= 8;
-	nw = (send_tensor->width + 7)/8; nw *= 8;
-
-	if (send_tensor->height == nh && send_tensor->width == nw) {
-		// Normal onnx RPC
-		recv_tensor = OnnxRPC(socket, send_tensor, VIDEO_SLOW_REQCODE, &rescode);
-	} else {
-		resize_send = tensor_zoom(send_tensor, nh, nw); CHECK_TENSOR(resize_send);
-		resize_recv = OnnxRPC(socket, resize_send, VIDEO_SLOW_REQCODE, &rescode);
-		recv_tensor = tensor_zoom(resize_recv, send_tensor->height, send_tensor->width);
-		tensor_destroy(resize_recv);
-		tensor_destroy(resize_send);
-	}
-
-	return recv_tensor;
-}
-
-
 int slow(int socket, char *input_file1, char *input_file2)
 {
 	TENSOR *send_tensor, *recv_tensor;
@@ -372,7 +345,8 @@ int slow(int socket, char *input_file1, char *input_file2)
 	send_tensor = slow_load(input_file1, input_file2);
 	check_tensor(send_tensor);
 
-	recv_tensor = slow_onnxrpc(socket, send_tensor);
+	// Server limited: only accept 8 times tensor !!!
+	recv_tensor = ZeropadOnnxRPC(socket, send_tensor, VIDEO_SLOW_REQCODE, 8);
 	if (tensor_valid(recv_tensor)) {
 		slow_save(recv_tensor);
 		tensor_destroy(recv_tensor);

@@ -41,7 +41,6 @@ void dump(TENSOR * recv_tensor, char *filename)
 
 int nima(int socket, char *input_file)
 {
-	int rescode;
 	IMAGE *image, *send_image;
 	TENSOR *send_tensor, *recv_tensor;
 
@@ -53,7 +52,7 @@ int nima(int socket, char *input_file)
 		send_tensor = tensor_from_image(send_image, 0);	// 1x3x244x244
 		check_tensor(send_tensor);
 
-		recv_tensor = OnnxRPC(socket, send_tensor, IMAGE_NIMA_REQCODE, &rescode);
+		recv_tensor = OnnxRPC(socket, send_tensor, IMAGE_NIMA_REQCODE);
 		if (tensor_valid(recv_tensor)) {
 			dump(recv_tensor, input_file);
 			tensor_destroy(recv_tensor);

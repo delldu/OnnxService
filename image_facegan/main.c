@@ -464,7 +464,6 @@ int server(char *endpoint, int use_gpu)
 
 int facegan(int socket, char *input_file)
 {
-	int rescode;
 	IMAGE *send_image, *resize_send_image;
 	TENSOR *send_tensor, *recv_tensor;
 
@@ -477,7 +476,7 @@ int facegan(int socket, char *input_file)
 		send_tensor = tensor_from_image(resize_send_image, 0);
 		check_tensor(send_tensor);
 
-		recv_tensor = OnnxRPC(socket, send_tensor, IMAGE_FACEGAN_REQCODE, &rescode);
+		recv_tensor = OnnxRPC(socket, send_tensor, IMAGE_FACEGAN_REQCODE);
 		if (tensor_valid(recv_tensor)) {
 			SaveTensorAsImage(recv_tensor, input_file);
 			tensor_destroy(recv_tensor);
