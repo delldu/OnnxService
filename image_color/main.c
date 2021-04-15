@@ -21,6 +21,9 @@
 // #define IMAGE_COLOR_URL "ipc:///tmp/image_color.ipc"
 #define IMAGE_COLOR_URL "tcp://127.0.0.1:9102"
 
+extern int ClassicService(char *endpoint, int use_gpu);
+
+
 // input: rgb,  r, g, b in [0.0, 1.0]
 // output: lab, L in [-.50, 0.5], ab in [-1.0, 1.0]
 TENSOR *image_rgb2lab(TENSOR *rgb)
@@ -161,15 +164,21 @@ TENSOR *blend_fake(TENSOR *source, TENSOR *fake_ab)
 	return image_lab2rgb(source);
 }
 
-int server(char *endpoint, int use_gpu)
+int color_server(char *endpoint, int use_gpu)
 {
-	// image color model:
+	char *model;
+	model = getenv("COLOR_MODEL");
+	// image color_model:
 	// input:  lab with mask, l in [-0.5, 0.5], ab in [-1.0, 1.0], mask in [0, 1.0], and 1.0 is valid
 	// output: ab
-	return OnnxService(endpoint, (char *)"image_color.onnx", use_gpu);
+	if (! model || strncasecmp(model, "AI", 2) == 0)
+		return OnnxService(endpoint, (char *)"image_color.onnx", use_gpu);
+
+	// Tradition model
+	return ClassicService(endpoint, use_gpu);
 }
 
-int color(int socket, char *input_file)
+int color_client(int socket, char *input_file)
 {
 	IMAGE *send_image;
 	TENSOR *send_tensor, *recv_tensor, *ouput_rgb_tensor;
@@ -246,13 +255,13 @@ int main(int argc, char **argv)
 	}
 
 	if (running_server)
-		return server(endpoint, use_gpu);
+		return color_server(endpoint, use_gpu);
 	else if (argc > 1) {
 		if ((socket = client_open(endpoint)) < 0)
 			return RET_ERROR;
 
 		for (i = optind; i < argc; i++)
-			color(socket, argv[i]);
+			color_client(socket, argv[i]);
 
 		client_close(socket);
 		return RET_OK;

@@ -13,6 +13,7 @@ TARGET := image_color
 
 SOURCE :=  \
 	main.c \
+	color.c \
 
 INCS	:= -I../lib -I$(ONNXRUNTIME_INSTALL_DIR)/include $(shell nimagetool --cflags)
 
