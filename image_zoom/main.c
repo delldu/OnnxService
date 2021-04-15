@@ -21,8 +21,18 @@
 // #define IMAGE_ZOOM_URL "ipc:///tmp/image_zoom.ipc"
 #define IMAGE_ZOOM_URL "tcp://127.0.0.1:9105"
 
-int server(char *endpoint, char *model, int use_gpu)
+int server(char *endpoint, int use_gpu)
 {
+	char *model;
+
+	model = getenv("ZOOM_MODEL");
+	if (! model || model[0] == 'S' || model[0] == 's')
+		model = (char *)"image_zooms.onnx";
+	else
+		model = (char *)"image_zoom.onnx";
+
+	syslog_info("Zoom model: %s ...", model);
+
 	return OnnxService(endpoint, model, use_gpu);
 }
 
@@ -57,8 +67,7 @@ void help(char *cmd)
 	printf("Usage: %s [option] <image files>\n", cmd);
 	printf("    h, --help                   Display this help.\n");
 	printf("    e, --endpoint               Set endpoint.\n");
-	printf("    s, --server <model>         Start server (image_zoom.onnx, image_zooms.onnx, default: image_zoom.onnx).\n");
-	printf("    d, --device <1 | 0>         Using device (1 -- gpu, 0 -- cpu, default: gpu).\n");
+	printf("    s, --server <1 | 0>         Start server (use gpu).\n");
 
 	exit(1);
 }
@@ -68,7 +77,6 @@ int main(int argc, char **argv)
 	int i, optc;
 	int use_gpu = 1;
 	int running_server = 0;
-	char *model = (char *)"image_zoom.onnx";
 	int socket;
 
 	int option_index = 0;
@@ -78,26 +86,21 @@ int main(int argc, char **argv)
 		{"help", 0, 0, 'h'},
 		{"endpoint", 1, 0, 'e'},
 		{"server", 1, 0, 's'},
-		{"device", 1, 0, 'd'},
 		{0, 0, 0, 0}
 	};
 
 	if (argc <= 1)
 		help(argv[0]);
 
-	while ((optc = getopt_long(argc, argv, "h e: s: d:", long_opts, &option_index)) != EOF) {
+	while ((optc = getopt_long(argc, argv, "h e: s:" , long_opts, &option_index)) != EOF) {
 		switch (optc) {
 		case 'e':
 			endpoint = optarg;
 			break;
 		case 's':
 			running_server = 1;
-			model = optarg;
-			break;
-		case 'd':
 			use_gpu = atoi(optarg);
 			break;
-
 		case 'h':				// help
 		default:
 			help(argv[0]);
@@ -106,7 +109,7 @@ int main(int argc, char **argv)
 	}
 
 	if (running_server)
-		return server(endpoint, model, use_gpu);
+		return server(endpoint, use_gpu);
 	else if (argc > 1) {
 		if ((socket = client_open(endpoint)) < 0)
 			return RET_ERROR;
