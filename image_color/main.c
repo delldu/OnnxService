@@ -69,7 +69,10 @@ TENSOR *image_rgb2lab(TENSOR *rgb)
 
 TENSOR *color_normlab(IMAGE * image)
 {
+	int i, j;
+	BYTE R, G, B;
 	TENSOR *tensor, *output_lab_tensor;
+	float *mask;
 
 	CHECK_IMAGE(image);
 	tensor = tensor_from_image(image, 1 /*with alpha */);
@@ -79,7 +82,24 @@ TENSOR *color_normlab(IMAGE * image)
 	CHECK_TENSOR(output_lab_tensor);
 	tensor_destroy(tensor);
 
-	tensor_setmask(output_lab_tensor, 1.0);
+	mask = tensor_start_chan(output_lab_tensor, 0, 3);
+	image_foreach(image, i, j) {
+		R = image->ie[i][j].r;
+		G = image->ie[i][j].g;
+		B = image->ie[i][j].b;
+
+		// Black or white, set 1.0, lambda >= 2% (255 * 2% == 5)
+		if ((R < 5 && G < 5 && B < 5) || (R > 250 && G > 250 && B > 250)) {
+			*mask++ = 1.0;
+		} else {
+			if (R == G && R == B) {	// Gray point
+				*mask++ = 0.0;
+			} else {	// Color Point
+				*mask++ = 1.0;
+			}
+		}
+
+	}
 
 	return output_lab_tensor;
 }
