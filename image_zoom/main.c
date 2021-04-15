@@ -31,7 +31,7 @@ int server(char *endpoint, int use_gpu)
 	else
 		model = (char *)"image_zoom.onnx";
 
-	syslog_info("Zoom model: %s ...", model);
+	syslog_info("Zoom model: %s ... ", model);
 
 	return OnnxService(endpoint, model, use_gpu);
 }
