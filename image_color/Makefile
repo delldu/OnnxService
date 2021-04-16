@@ -15,7 +15,8 @@ SOURCE :=  \
 	main.c \
 	color.c \
 
-INCS	:= -I../lib -I$(ONNXRUNTIME_INSTALL_DIR)/include $(shell nimagetool --cflags)
+INCS	:= -I../lib -I$(ONNXRUNTIME_INSTALL_DIR)/include $(shell nimagetool --cflags) \
+		-I/usr/include/eigen3
 
 LIBS	:= -L../lib -lonnxeng -L$(ONNXRUNTIME_INSTALL_DIR)/lib -lonnxruntime $(shell nimagetool --libs)
 

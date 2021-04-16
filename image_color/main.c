@@ -191,10 +191,13 @@ int color_server(char *endpoint, int use_gpu)
 	// image color_model:
 	// input:  lab with mask, l in [-0.5, 0.5], ab in [-1.0, 1.0], mask in [0, 1.0], and 1.0 is valid
 	// output: ab
-	if (! model || strncasecmp(model, "AI", 2) == 0)
+	if (! model || strncasecmp(model, "AI", 2) == 0) {
+		syslog_info("Color server is running on AI model ... ");
 		return OnnxService(endpoint, (char *)"image_color.onnx", use_gpu);
+	}
 
 	// Tradition model
+	syslog_info("Color server is running on tradition model ... ");
 	return ClassicService(endpoint, use_gpu);
 }
 
