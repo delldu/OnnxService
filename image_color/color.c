@@ -23,7 +23,7 @@
 #define WINDOW_PIXELS	(WINDOW_WIDTH*WINDOW_WIDTH)
 
 
-typedef Eigen::Triplet<float> TripletFloat;
+typedef Eigen::Triplet<double> TD;
 
 float variance(const std::vector<float>& vals, float eps=0.01)
 {
@@ -84,9 +84,9 @@ inline void getWeights(float *Lc, int r,
 
 
 void setupProblem(TENSOR *input_tensor,
-	Eigen::SparseMatrix<float, Eigen::RowMajor>& A,
-	Eigen::VectorXf& bu,
-    Eigen::VectorXf& bv, float gamma)
+	Eigen::SparseMatrix<double, Eigen::RowMajor>& A,
+	Eigen::VectorXd& bu,
+    Eigen::VectorXd& bv, float gamma)
 {
 	int i, j, k, r;
     float *Lc, *ac, *bc, *mc;	// Lab + mask channels
@@ -96,7 +96,7 @@ void setupProblem(TENSOR *input_tensor,
     int nPixels = nrows * ncols;
     A.resize(nPixels, nPixels);
 
-    std::vector<TripletFloat> coefficients;
+    std::vector<TD> coefficients;
     coefficients.reserve(nPixels * 3);
     bu.resize(nPixels);
     bv.resize(nPixels);
@@ -108,7 +108,6 @@ void setupProblem(TENSOR *input_tensor,
     bc = tensor_start_chan(input_tensor, 0, 2);
     mc = tensor_start_chan(input_tensor, 0, 3);
 
-
     const int numNeighbors = 8;
     std::vector<float> weights;
     weights.reserve(numNeighbors);
@@ -119,7 +118,7 @@ void setupProblem(TENSOR *input_tensor,
             r = i * ncols + j;
             getNeighbours(i, j, nrows, ncols, neighbors);
             getWeights(Lc, r, neighbors, weights, gamma);
-            coefficients.push_back(TripletFloat(r, r, 1));	// dialog set
+            coefficients.push_back(TD(r, r, 1));	// dialog set
             for (k = 0; k < (int)neighbors.size(); ++k) {
                 auto s = neighbors[k];
                 auto w = weights[k];
@@ -128,7 +127,7 @@ void setupProblem(TENSOR *input_tensor,
                      bu(r) += w * ac[s];
                      bv(r) += w * bc[s];
                 } else {
-                     coefficients.push_back(TripletFloat(r, s, -w));
+                     coefficients.push_back(TD(r, s, -w));
                 }
             }
         }
@@ -149,13 +148,13 @@ TENSOR *tensor_lab2yuv(TENSOR *lab_tensor)
 	int i, n, bat;
 	float L, a, b;
 	BYTE R, G, B, y, cb, cr;
-	float *Lc, *ac, *bc, *yc, *uc, *vc;	// channels
+	float *Lc, *ac, *bc, *Labmc, *yc, *uc, *vc, *yuvmc;	// channels
 	TENSOR *yuv_tensor;
 
-	// input with mask, output only YUV channel
+	// input with mask, output YUV + Mask channel
 	CHECK_TENSOR(lab_tensor);
 
-	yuv_tensor = tensor_create(lab_tensor->batch, 3, lab_tensor->height, lab_tensor->width);
+	yuv_tensor = tensor_create(lab_tensor->batch, 4, lab_tensor->height, lab_tensor->width);
 	CHECK_TENSOR(yuv_tensor);
 
 	n = lab_tensor->height * lab_tensor->width;
@@ -169,19 +168,24 @@ TENSOR *tensor_lab2yuv(TENSOR *lab_tensor)
 		uc = tensor_start_chan(yuv_tensor, bat, 1);
 		vc = tensor_start_chan(yuv_tensor, bat, 2);
 
+
 		for (i = 0; i < n; i++) {
-			L = *Lc++; a = *ac++; b = *bc++;
+			L = Lc[i]; a = ac[i]; b = bc[i];
 
 			L += 0.5; L *= 100.0;
 			a *= 110.0;
 			b *= 110.0;
 			color_lab2rgb(L, a, b, &R, &G, &B);
 			color_rgb2ycbcr(R, G, B, &y, &cb, &cr);
-
-			*yc++ = y;
-			*uc++ = cb;
-			*vc++ = cr;
+			yc[i] = y;
+			uc[i] = cb;
+			vc[i] = cr;
 		}
+
+		// Copy Lab mask to YUV mask channel
+		Labmc = tensor_start_chan(lab_tensor, bat, 3);
+		yuvmc = tensor_start_chan(yuv_tensor, bat, 3);
+		memcpy(yuvmc, Labmc, n * sizeof(float));
 	}
 
 	return yuv_tensor;
@@ -210,17 +214,19 @@ TENSOR *tensor_yuv2ab(TENSOR *yuv_tensor)
 		bc = tensor_start_chan(ab_tensor, bat, 1);
 
 		for (i = 0; i < n; i++) {
-			y = *yc++;
-			cb = *uc++;
-			cr = *vc++;
+			y = yc[i];
+			cb = uc[i];
+			cr = vc[i];
 			color_ycbcr2rgb(y, cb, cr, &R, &G, &B);
 			color_rgb2lab(R, G, B, &L, &a, &b);
 			// L -= 50; L /= 100.0;
 			a /= 110;
 			b /= 110;
+			// CheckPoint("YUV --> ab: a = %.2f, b = %.2f, R = %d, G = %d, B = %d, y = %d, cb = %d, cr = %d", 
+			// 	a, b, R, G, B, y, cb, cr);
 
-			*ac++ = a;
-			*bc++ = b;
+			ac[i] = a;
+			bc[i] = b;
 		}
     }
 
@@ -229,7 +235,7 @@ TENSOR *tensor_yuv2ab(TENSOR *yuv_tensor)
 
 TENSOR *do_color(TENSOR *input_tensor)
 {
-	int n;
+	int i, n;
 	float *uc, *vc;		// U, V Channel
 
 	TENSOR *output_tensor, *yuv_tensor;
@@ -244,25 +250,25 @@ TENSOR *do_color(TENSOR *input_tensor)
 	// Output: 2 Channels, fake ab !!!
 
     // Set up matrices for U and V channels
-    Eigen::SparseMatrix<float, Eigen::RowMajor> A;
-    Eigen::VectorXf bu;
-    Eigen::VectorXf bv;
+    Eigen::SparseMatrix<double, Eigen::RowMajor> A;
+    Eigen::VectorXd bu;
+    Eigen::VectorXd bv;
 
     setupProblem(yuv_tensor, A, bu, bv, 2.0 /*gamma*/);
 
     // Solve for U, V channels
     syslog_info("Solving for U channel.");
-    Eigen::BiCGSTAB<Eigen::SparseMatrix<float>, Eigen::DiagonalPreconditioner<float> > solver;
+    Eigen::BiCGSTAB<Eigen::SparseMatrix<double>, Eigen::DiagonalPreconditioner<double> > solver;
 
     solver.compute(A);
-    Eigen::VectorXf U = solver.solve(bu);
+    Eigen::VectorXd U = solver.solve(bu);
     if (solver.info() != Eigen::Success) {
         syslog_error("Failed to solve for U channel.");
         return NULL;
     }
 
     syslog_info("Solving for V channel.");
-    Eigen::VectorXf V = solver.solve(bv);
+    Eigen::VectorXd V = solver.solve(bv);
     if (solver.info() != Eigen::Success) {
         syslog_error("Failed to solve for V channel.");
         return NULL;
@@ -272,8 +278,12 @@ TENSOR *do_color(TENSOR *input_tensor)
     n = input_tensor->height * input_tensor->width;
     uc = tensor_start_chan(yuv_tensor, 0, 1);
     vc = tensor_start_chan(yuv_tensor, 0, 2);
-    memcpy(uc, (float *)U.data(), n * sizeof(float));
-    memcpy(vc, (float *)V.data(), n * sizeof(float));
+    for (i = 0; i < n; i++) {
+    	uc[i] = (float)U[i];
+    	vc[i] = (float)V[i];
+    }
+    // memcpy(uc, (float *)U.data(), n * sizeof(float));
+    // memcpy(vc, (float *)V.data(), n * sizeof(float));
 
     // Convert UV to Fake-ab ...
     output_tensor = tensor_yuv2ab(yuv_tensor);

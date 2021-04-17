@@ -342,7 +342,7 @@ void DestroyEngine(OrtEngine * engine)
 
 int OnnxService(char *endpoint, char *onnx_file, int use_gpu)
 {
-	int socket, reqcode, count, rescode;
+	int socket, reqcode, count, rescode = -1;
 	TENSOR *input_tensor, *output_tensor;
 	OrtEngine *engine;
 
@@ -373,6 +373,10 @@ int OnnxService(char *endpoint, char *onnx_file, int use_gpu)
 			rescode = reqcode;
 			response_send(socket, output_tensor, rescode);
 			tensor_destroy(output_tensor);
+		} else {
+			// Echo response with error -1
+			CheckPoint("--------------------------------------------------!!!!!!!!!!!!!! !");
+			response_send(socket, input_tensor, -1);
 		}
 
 		tensor_destroy(input_tensor);
@@ -389,7 +393,7 @@ int OnnxService(char *endpoint, char *onnx_file, int use_gpu)
 
 TENSOR *OnnxRPC(int socket, TENSOR * input, int reqcode)
 {
-	int rescode;
+	int rescode  = -1;
 	TENSOR *output = NULL;
 
 	CHECK_TENSOR(input);
@@ -397,7 +401,12 @@ TENSOR *OnnxRPC(int socket, TENSOR * input, int reqcode)
 	if (request_send(socket, reqcode, input) == RET_OK) {
 		output = response_recv(socket, &rescode);
 	}
-
+    if (rescode != reqcode) {
+    	// Bad service response
+    	syslog_error("Remote service running failure.");
+    	tensor_destroy(output);
+    	return NULL;
+    }
 	return output;
 }
 
