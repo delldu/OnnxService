@@ -237,10 +237,10 @@ int SlowService(char *endpoint, int use_gpu)
 	if ((socket = server_open(endpoint)) < 0)
 		return RET_ERROR;
 
-	fc_engine = CreateEngine("video_slow_fc.onnx", use_gpu /*use_gpu*/);
+	fc_engine = CreateEngine((char *)"video_slow_fc.onnx", use_gpu /*use_gpu*/);
 	CheckEngine(fc_engine);
 
-	at_engine = CreateEngine("video_slow_at.onnx", use_gpu /*use_gpu*/);
+	at_engine = CreateEngine((char *)"video_slow_at.onnx", use_gpu /*use_gpu*/);
 	CheckEngine(at_engine);
 
 	lambda = 0;
@@ -250,7 +250,7 @@ int SlowService(char *endpoint, int use_gpu)
 		input_tensor = request_recv(socket, &reqcode);
 
 		if (!tensor_valid(input_tensor)) {
-			syslog_error("Request recv bad tensor ...");
+			syslog_error("Request receive tensor ...");
 			continue;
 		}
 		syslog_info("Request Code = %d", reqcode);

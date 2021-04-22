@@ -214,11 +214,11 @@ void DestroyOrtTensor(OrtValue * tensor)
 	onnx_runtime_api->ReleaseValue(tensor);
 }
 
-OrtEngine *CreateEngine(const char *model_path, int use_gpu)
+OrtEngine *CreateEngine(char *model_path, int use_gpu)
 {
 	OrtEngine *t;
 
-	syslog_info("Creating ONNX Runtime Engine for model %s ...\n", model_path);
+	syslog_info("Creating ONNX Runtime Engine for model %s ...", model_path);
 
 	t = (OrtEngine *) calloc((size_t) 1, sizeof(OrtEngine));
 	if (!t) {
@@ -247,6 +247,9 @@ OrtEngine *CreateEngine(const char *model_path, int use_gpu)
 	if (use_gpu)
 		CheckStatus(OrtSessionOptionsAppendExecutionProvider_CUDA(t->session_options, 0));
 
+	// CreateSessionFromArray prototype
+	// ORT_API2_STATUS(CreateSessionFromArray, _In_ const OrtEnv* env, _In_ const void* model_data, size_t model_data_length,
+	//                  _In_ const OrtSessionOptions* options, _Outptr_ OrtSession** out);	
 	CheckStatus(onnx_runtime_api->CreateSession(t->env, model_path, t->session_options, &(t->session)));
 
 	// Setup input_node_names;
@@ -259,6 +262,60 @@ OrtEngine *CreateEngine(const char *model_path, int use_gpu)
 
 	return t;
 }
+
+OrtEngine *CreateEngineFromArray(void* model_data, size_t model_data_length, int use_gpu)
+{
+	OrtEngine *t;
+	const char *model_path = "memory";
+
+	syslog_info("Creating ONNX Runtime Engine for model size %s ...", model_path);
+
+	t = (OrtEngine *) calloc((size_t) 1, sizeof(OrtEngine));
+	if (!t) {
+		syslog_error("Allocate memeory.");
+		return NULL;
+	}
+	t->magic = ENGINE_MAGIC;
+	t->model_path = model_path;
+	t->use_gpu = use_gpu;
+
+	// Building ...
+	CheckStatus(onnx_runtime_api->CreateEnv(ORT_LOGGING_LEVEL_WARNING, "OrtEngine", &(t->env)));
+	// CheckStatus(onnx_runtime_api->CreateEnv(ORT_LOGGING_LEVEL_VERBOSE, "OrtEngine", &(t->env)));
+
+	// initialize session options if needed
+	CheckStatus(onnx_runtime_api->CreateSessionOptions(&(t->session_options)));
+	// CheckStatus(onnx_runtime_api->SetIntraOpNumThreads(t->session_options, 0));  // 0 -- for default 
+
+	// Sets graph optimization level
+	CheckStatus(onnx_runtime_api->SetSessionGraphOptimizationLevel(t->session_options, ORT_ENABLE_ALL));
+	// ORT_ENABLE_BASIC, ORT_ENABLE_EXTENDED, ORT_ENABLE_ALL
+
+	// Optionally add more execution providers via session_options
+	// E.g. for CUDA include cuda_provider_factory.h and uncomment the following line:
+	
+	if (use_gpu)
+		CheckStatus(OrtSessionOptionsAppendExecutionProvider_CUDA(t->session_options, 0));
+
+	// CreateSessionFromArray prototype
+	// ORT_API2_STATUS(CreateSessionFromArray, _In_ const OrtEnv* env, 
+	// 		_In_ const void* model_data, size_t model_data_length,
+	//		_In_ const OrtSessionOptions* options, _Outptr_ OrtSession** out);	
+	CheckStatus(onnx_runtime_api->CreateSessionFromArray(t->env, model_data, model_data_length, 
+		t->session_options, &(t->session)));
+
+	// Setup input_node_names;
+	InitInputNodes(t);
+
+	// Setup output_node_names;
+	InitOutputNodes(t);
+
+	syslog_info("Create ONNX Runtime Engine OK.\n");
+
+	return t;
+}
+
+
 
 int ValidEngine(OrtEngine * t)
 {
@@ -359,7 +416,7 @@ int OnnxService(char *endpoint, char *onnx_file, int use_gpu)
 		input_tensor = request_recv(socket, &reqcode);
 
 		if (!tensor_valid(input_tensor)) {
-			syslog_error("Request recv bad tensor ...");
+			syslog_error("Request receive tensor ...");
 			continue;
 		}
 		syslog_info("Request Code = 0x%x", reqcode);
@@ -391,6 +448,59 @@ int OnnxService(char *endpoint, char *onnx_file, int use_gpu)
 	return RET_OK;
 }
 
+int OnnxServiceFromArray(char *endpoint,  void* model_data, size_t model_data_length, int use_gpu)
+{
+	int socket, reqcode, count, rescode = -1;
+	TENSOR *input_tensor, *output_tensor;
+	OrtEngine *engine;
+
+	if ((socket = server_open(endpoint)) < 0)
+		return RET_ERROR;
+
+	engine = CreateEngineFromArray(model_data, model_data_length, use_gpu);
+	CheckEngine(engine);
+
+	count = 0;
+	for (;;) {
+		syslog_info("Service %d times", count);
+
+		input_tensor = request_recv(socket, &reqcode);
+
+		if (!tensor_valid(input_tensor)) {
+			syslog_error("Request receive tensor ...");
+			continue;
+		}
+		syslog_info("Request Code = 0x%x", reqcode);
+
+		// Real service ...
+		time_reset();
+		output_tensor = TensorForward(engine, input_tensor);
+		time_spend((char *)"Predict");
+
+		if (tensor_valid(output_tensor)) {
+			rescode = reqcode;
+			response_send(socket, output_tensor, rescode);
+			tensor_destroy(output_tensor);
+		} else {
+			// Echo response with error -1
+			CheckPoint("--------------------------------------------------!!!!!!!!!!!!!! !");
+			response_send(socket, input_tensor, -1);
+		}
+
+		tensor_destroy(input_tensor);
+
+		count++;
+	}
+	DestroyEngine(engine);
+
+	syslog(LOG_INFO, "Service shutdown.\n");
+	server_close(socket);
+
+	return RET_OK;
+}
+
+
+
 TENSOR *OnnxRPC(int socket, TENSOR * input, int reqcode)
 {
 	int rescode  = -1;
@@ -403,7 +513,7 @@ TENSOR *OnnxRPC(int socket, TENSOR * input, int reqcode)
 	}
     if (rescode != reqcode) {
     	// Bad service response
-    	syslog_error("Remote service running failure.");
+    	syslog_error("Remote running service.");
     	tensor_destroy(output);
     	return NULL;
     }

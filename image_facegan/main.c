@@ -303,7 +303,7 @@ double *cmaes_search(int epochs)
 		/* Initialize thread creation attributes */
 		ret = pthread_attr_init(&attr);
 		if (ret != 0)
-			syslog_error("pthread_attr_init");
+			syslog_error("Init thread attr.");
 
 		// for (i = 0; i < lambda; ++i) {
 		// 	cost_values[i] = fitfun(pop[i], dimension);	/* evaluate */
@@ -316,17 +316,17 @@ double *cmaes_search(int epochs)
 
 			ret = pthread_create(&info[i].id, &attr, &fit_start, &info[i]);
 			if (ret != 0)
-				syslog_error("pthread_create");
+				syslog_error("Create thread.");
 		}
 		ret = pthread_attr_destroy(&attr);
 		if (ret != 0)
-			syslog_error("pthread_attr_destroy");
+			syslog_error("Destropy thread attr.");
 
 		/* Now join with each thread */
 		for (i = 0; i < lambda; i++) {
 			ret = pthread_join(info[i].id, NULL);
 			if (ret != 0)
-				syslog_error("pthread_join");
+				syslog_error("Join thread.");
 		}
 
 		// Save cost
@@ -402,13 +402,13 @@ int FaceGanService(char *endpoint, int use_gpu)
 	if ((socket = server_open(endpoint)) < 0)
 		return RET_ERROR;
 
-	decoder_engine = CreateEngine("image_gandecoder.onnx", 0 /*not use_gpu for model bug !!!*/);
+	decoder_engine = CreateEngine((char *)"image_gandecoder.onnx", 0 /*not use_gpu for model bug !!!*/);
 	CheckEngine(decoder_engine);
 
-	transformer_engine = CreateEngine("image_gantransformer.onnx", use_gpu /*use_gpu*/);
+	transformer_engine = CreateEngine((char *)"image_gantransformer.onnx", use_gpu /*use_gpu*/);
 	CheckEngine(transformer_engine);
 
-	loss_engine = CreateEngine("image_ganloss.onnx", use_gpu /*use_gpu*/);
+	loss_engine = CreateEngine((char *)"image_ganloss.onnx", use_gpu /*use_gpu*/);
 	CheckEngine(loss_engine);
 
 	lambda = 0;
@@ -497,10 +497,10 @@ int test()
 
 	srand(time(NULL));
 
-	transformer_engine = CreateEngine("image_gantransformer.onnx", 0);
+	transformer_engine = CreateEngine((char *)"image_gantransformer.onnx", 0);
 	CheckEngine(transformer_engine);
 
-	decoder_engine = CreateEngine("image_gandecoder.onnx", 0);
+	decoder_engine = CreateEngine((char *)"image_gandecoder.onnx", 0);
 	CheckEngine(decoder_engine);
 
 	time_reset();

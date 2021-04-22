@@ -18,7 +18,9 @@ SOURCE :=  \
 INCS	:= -I../lib -I$(ONNXRUNTIME_INSTALL_DIR)/include $(shell nimagetool --cflags) \
 		-I/usr/include/eigen3
 
-LIBS	:= -L../lib -lonnxeng -L$(ONNXRUNTIME_INSTALL_DIR)/lib -lonnxruntime $(shell nimagetool --libs)
+LIBS	:= -L../lib -lonnxeng -L$(ONNXRUNTIME_INSTALL_DIR)/lib \
+		-lonnxruntime $(shell nimagetool --libs) \
+		-Wl,-rpath=$(ONNXRUNTIME_INSTALL_DIR)/lib
 
 DEFINES := -D_GLIBCXX_USE_CXX11_ABI=1 -std=c++14 -std=gnu++14
 

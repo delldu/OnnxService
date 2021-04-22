@@ -263,14 +263,14 @@ TENSOR *do_color(TENSOR *input_tensor)
     solver.compute(A);
     Eigen::VectorXd U = solver.solve(bu);
     if (solver.info() != Eigen::Success) {
-        syslog_error("Failed to solve for U channel.");
+        syslog_error("Solve for U channel.");
         return NULL;
     }
 
     syslog_info("Solving for V channel.");
     Eigen::VectorXd V = solver.solve(bv);
     if (solver.info() != Eigen::Success) {
-        syslog_error("Failed to solve for V channel.");
+        syslog_error("Solve for V channel.");
         return NULL;
     }
 
@@ -311,7 +311,7 @@ int ClassicService(char *endpoint, int use_gpu)
 		input_tensor = request_recv(socket, &reqcode);
 
 		if (!tensor_valid(input_tensor)) {
-			syslog_error("Request recv bad tensor ...");
+			syslog_error("Request receive tensor ...");
 			continue;
 		}
 		syslog_info("Request Code = 0x%x", reqcode);

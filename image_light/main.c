@@ -16,6 +16,7 @@
 #include <nimage/nnmsg.h>
 
 #include "engine.h"
+#include "model.h"
 
 #define IMAGE_LIGHT_REQCODE 0x0106
 // #define IMAGE_LIGHT_URL "ipc:///tmp/image_light.ipc"
@@ -23,7 +24,7 @@
 
 int server(char *endpoint, int use_gpu)
 {
-	return OnnxService(endpoint, (char *)"image_light.onnx", use_gpu);
+	return OnnxServiceFromArray(endpoint, image_light_onnx, image_light_onnx_len, use_gpu);
 }
 
 int light(int socket, char *input_file)

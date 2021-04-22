@@ -34,7 +34,7 @@ int ColorService(char *endpoint, int use_gpu)
 		return RET_ERROR;
 
 
-	clean_engine = CreateEngine("video_clean.onnx", use_gpu /*use_gpu*/);
+	clean_engine = CreateEngine((char *)"video_clean.onnx", use_gpu /*use_gpu*/);
 	CheckEngine(clean_engine);
 
 	lambda = 0;
@@ -44,7 +44,7 @@ int ColorService(char *endpoint, int use_gpu)
 		input_tensor = request_recv(socket, &reqcode);
 
 		if (!tensor_valid(input_tensor)) {
-			syslog_error("Request recv bad tensor ...");
+			syslog_error("Request receive tensor ...");
 			continue;
 		}
 		syslog_info("Request Code = %d", reqcode);
