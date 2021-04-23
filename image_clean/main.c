@@ -21,12 +21,14 @@
 // #define IMAGE_CLEAN_URL "ipc:///tmp/image_clean.ipc"
 #define IMAGE_CLEAN_URL "tcp://127.0.0.1:9101"
 
+// Image clean model input: 1x3x(-1)x(-1), output 1x3x(-1)x(-1)
 int server(char *endpoint, int use_gpu)
 {
+	InitEngineRunningTime();
 	return OnnxService(endpoint, (char *)"image_clean.onnx", IMAGE_CLEAN_SERVICE, use_gpu);
 }
 
-int clean(int socket, char *input_file)
+int image_clean(int socket, char *input_file)
 {
 	IMAGE *send_image;
 	TENSOR *send_tensor, *recv_tensor;
@@ -106,7 +108,7 @@ int main(int argc, char **argv)
 			return RET_ERROR;
 
 		for (i = optind; i < argc; i++)
-			clean(socket, argv[i]);
+			image_clean(socket, argv[i]);
 
 		client_close(socket);
 		return RET_OK;

@@ -21,10 +21,10 @@
 // #define VIDEO_CLEAN_URL "ipc:///tmp/video_clean.ipc"
 #define VIDEO_CLEAN_URL "tcp://127.0.0.1:9201"
 
-
+// Patch model input: 1 x 16 x (-1) x (-1), 1 x 3 x (-1) x (-1)
 int ColorService(char *endpoint, int use_gpu)
 {
-	int socket, lambda;
+	int socket, count;
 	TENSOR *input_tensor, *output_tensor;
 	OrtEngine *clean_engine = NULL;
 
@@ -33,17 +33,21 @@ int ColorService(char *endpoint, int use_gpu)
 	if ((socket = server_open(endpoint)) < 0)
 		return RET_ERROR;
 
-
-	clean_engine = CreateEngine((char *)"video_clean.onnx", use_gpu /*use_gpu*/);
-	CheckEngine(clean_engine);
-
-	lambda = 0;
+	count = 0;
 	for (;;) {
-		syslog_info("Service %d times", lambda);
+		if (EngineIsIdle())
+			StopEngine(clean_engine);
+
+		if (! socket_readable(socket, 1000))	// timeout 1 s
+			continue;
 
 		input_tensor = service_request(socket, VIDEO_CLEAN_SERVICE);
 		if (!tensor_valid(input_tensor))
 			continue;
+
+		syslog_info("Service %d times", count);
+		StartEngine(clean_engine, (char *)"video_clean.onnx", use_gpu);
+		UpdateEngineRunningTime();
 
 		// Real service ...
 		time_reset();
@@ -55,10 +59,9 @@ int ColorService(char *endpoint, int use_gpu)
 
 		tensor_destroy(input_tensor);
 
-		lambda++;
+		count++;
 	}
-
-	DestroyEngine(clean_engine);
+	StopEngine(clean_engine);
 
 	syslog(LOG_INFO, "Service shutdown.\n");
 	server_close(socket);

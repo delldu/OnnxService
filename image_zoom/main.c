@@ -21,6 +21,7 @@
 // #define IMAGE_ZOOM_URL "ipc:///tmp/image_zoom.ipc"
 #define IMAGE_ZOOM_URL "tcp://127.0.0.1:9105"
 
+// Patch model input: 1 x 3 x (-1) x (-1), 1 x 3 x (-1) x (-1)
 int server(char *endpoint, int use_gpu)
 {
 	char *model;
@@ -32,6 +33,8 @@ int server(char *endpoint, int use_gpu)
 		model = (char *)"image_zoom.onnx";
 
 	syslog_info("Zoom model: %s ... ", model);
+
+	InitEngineRunningTime();
 
 	return OnnxService(endpoint, model, IMAGE_ZOOM_SERVICE, use_gpu);
 }

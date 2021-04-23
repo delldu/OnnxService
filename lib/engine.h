@@ -55,4 +55,35 @@ void SaveOutputImage(IMAGE *image, char *filename);
 void SaveTensorAsImage(TENSOR *tensor, char *filename);
 
 
+#define ENGINE_IDLE_TIME (120*1000)	// 120 seconds
+static TIME engine_last_running_time = 0;
+
+#define StartEngine(engine, onnx_file, use_gpu) \
+do { \
+	if (engine == NULL) \
+		engine = CreateEngine(onnx_file, use_gpu); \
+	CheckEngine(engine); \
+} while(0)
+
+#define StartEngineFromArray(engine, model_data, model_data_length, use_gpu) \
+do { \
+	if (engine == NULL) { \
+		syslog_info("---- Start Engine ..."); \
+		engine = CreateEngineFromArray(model_data, model_data_length, use_gpu); \
+	} \
+	CheckEngine(engine); \
+} while(0)
+
+#define StopEngine(engine) \
+do { \
+	syslog_info("---- Stop Engine ..."); \
+	DestroyEngine(engine); \
+	engine = NULL; \
+	engine_last_running_time = time_now(); \
+} while(0)
+
+#define InitEngineRunningTime() do { engine_last_running_time = 0; } while(0)
+#define EngineIsIdle() (time_now() - engine_last_running_time > ENGINE_IDLE_TIME)
+#define UpdateEngineRunningTime() do { engine_last_running_time = time_now(); } while(0)
+
 #endif // _ENGINE_H

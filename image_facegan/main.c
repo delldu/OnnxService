@@ -399,6 +399,8 @@ int FaceGanService(char *endpoint, int use_gpu)
 
 	srand(time(NULL));
 
+	InitEngineRunningTime();
+
 	if ((socket = server_open(endpoint)) < 0)
 		return RET_ERROR;
 

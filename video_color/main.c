@@ -193,9 +193,19 @@ TENSOR *color_do(OrtEngine *align_engine, OrtEngine *color_engine, TENSOR *input
 	return output_rgb_tensor;
 }
 
+// Video color model
+// 
+//	 video_align.onnx
+//	 	input: 1 x 9 x 512 x 512
+//	 	Output: 1 x 4 x 512 x 512
+//	 video_color.onnx
+//	 	Input: 1 x 7 x 512 x 512
+//	 	Output: 1 x 2 x 512 x 512
+//
+
 int ColorService(char *endpoint, int use_gpu)
 {
-	int socket, reqcode, lambda;
+	int socket, reqcode, count;
 	TENSOR *input_tensor, *output_tensor;
 	OrtEngine *color_engine = NULL;
 	OrtEngine *align_engine = NULL;
@@ -205,19 +215,25 @@ int ColorService(char *endpoint, int use_gpu)
 	if ((socket = server_open(endpoint)) < 0)
 		return RET_ERROR;
 
-	align_engine = CreateEngine((char *)"video_align.onnx", use_gpu /*use_gpu*/);
-	CheckEngine(align_engine);
-
-	color_engine = CreateEngine((char *)"video_color.onnx", use_gpu /*use_gpu*/);
-	CheckEngine(color_engine);
-
-	lambda = 0;
+	count = 0;
 	for (;;) {
-		syslog_info("Service %d times", lambda);
+		if (EngineIsIdle()) {
+			StopEngine(align_engine);
+			StopEngine(color_engine);
+		}
+
+		if (! socket_readable(socket, 1000))	// timeout 1 s
+			continue;
 
 		input_tensor = service_request_withcode(socket, &reqcode);
 		if (!tensor_valid(input_tensor))
 			continue;
+
+		syslog_info("Service %d times", count);
+
+		StartEngine(align_engine, (char *)"video_align.onnx", use_gpu);
+		StartEngine(color_engine, (char *)"video_color.onnx", use_gpu);
+		UpdateEngineRunningTime();
 
 		if (reqcode == VIDEO_REFERENCE_SERVICE) {
 			// Save tensor to global reference tensor
@@ -251,14 +267,14 @@ int ColorService(char *endpoint, int use_gpu)
 
 		tensor_destroy(input_tensor);
 
-		lambda++;
+		count++;
 	}
 
 	tensor_destroy(reference_lab512_tensor);
 	tensor_destroy(reference_rgb512_tensor);
 
-	DestroyEngine(color_engine);
-	DestroyEngine(align_engine);
+	StopEngine(align_engine);
+	StopEngine(color_engine);
 
 	syslog(LOG_INFO, "Service shutdown.\n");
 	server_close(socket);

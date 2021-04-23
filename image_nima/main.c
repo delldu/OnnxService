@@ -23,6 +23,8 @@
 
 int server(char *endpoint, int use_gpu)
 {
+	// Nima model input: 1 x 3 x 224 x 224, output 1 x 10
+	InitEngineRunningTime();
 	return OnnxService(endpoint, (char *)"image_nima.onnx", IMAGE_NIMA_SERVICE, use_gpu);
 }
 

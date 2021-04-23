@@ -21,6 +21,12 @@
 // #define IMAGE_MATTING_URL "ipc:///tmp/image_matting.ipc"
 #define IMAGE_MATTING_URL "tcp://127.0.0.1:9107"
 
+int server(char *endpoint, int use_gpu)
+{
+	// Matting model input: 4x3x(-1)x(-1), output 1x1x(-1)x(-1)
+	InitEngineRunningTime();
+	return OnnxService(endpoint, (char *)"image_matting.onnx", IMAGE_MATTING_SERVICE, use_gpu);
+}
 
 int normal_input(TENSOR *tensor)
 {
@@ -132,10 +138,6 @@ TENSOR *matting_onnxrpc(int socket, TENSOR *send_tensor)
 	return recv_tensor;
 }
 
-int server(char *endpoint, int use_gpu)
-{
-	return OnnxService(endpoint, (char *)"image_matting.onnx", IMAGE_MATTING_SERVICE, use_gpu);
-}
 
 int blend_mask(IMAGE *source_image, TENSOR *mask_tensor)
 {

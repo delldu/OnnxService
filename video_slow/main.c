@@ -225,9 +225,18 @@ TENSOR *slow_do(OrtEngine *fc, OrtEngine *at, TENSOR *input_tensor, int scale)
 	return output_tensor;
 }
 
+// Video slow model
+//
+// video_slow_fc.onnx -- flow compute
+// 		input: 1 x 6 x -1 x -1
+// 		output: 1 x 4 x -1 x -1
+// video_slow_at.onnx -- arbitary interpolate
+// 		input: 1 x 20 x -1 x -1
+// 		output: 1 x 5 x -1 x -1
+
 int SlowService(char *endpoint, int use_gpu)
 {
-	int socket, lambda;
+	int socket, count;
 	TENSOR *input_tensor, *output_tensor;
 	OrtEngine *fc_engine = NULL;
 	OrtEngine *at_engine = NULL;
@@ -237,19 +246,25 @@ int SlowService(char *endpoint, int use_gpu)
 	if ((socket = server_open(endpoint)) < 0)
 		return RET_ERROR;
 
-	fc_engine = CreateEngine((char *)"video_slow_fc.onnx", use_gpu /*use_gpu*/);
-	CheckEngine(fc_engine);
-
-	at_engine = CreateEngine((char *)"video_slow_at.onnx", use_gpu /*use_gpu*/);
-	CheckEngine(at_engine);
-
-	lambda = 0;
+	count = 0;
 	for (;;) {
-		syslog_info("Service %d times", lambda);
+		if (EngineIsIdle()) {
+			StopEngine(fc_engine);
+			StopEngine(at_engine);
+		}
+
+		if (! socket_readable(socket, 1000))	// timeout 1 s
+			continue;
 
 		input_tensor = service_request(socket, VIDEO_SLOW_SERVICE);
 		if (!tensor_valid(input_tensor))
 			continue;
+
+		syslog_info("Service %d times", count);
+
+		StartEngine(fc_engine, (char *)"video_slow_fc.onnx", use_gpu);
+		StartEngine(at_engine, (char *)"video_slow_at.onnx", use_gpu);
+		UpdateEngineRunningTime();
 
 		// Real service ...
 		time_reset();
@@ -261,10 +276,10 @@ int SlowService(char *endpoint, int use_gpu)
 
 		tensor_destroy(input_tensor);
 
-		lambda++;
+		count++;
 	}
-	DestroyEngine(at_engine);
-	DestroyEngine(fc_engine);
+	StopEngine(fc_engine);
+	StopEngine(at_engine);
 
 	syslog(LOG_INFO, "Service shutdown.\n");
 	server_close(socket);

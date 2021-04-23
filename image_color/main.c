@@ -184,15 +184,20 @@ TENSOR *blend_fake(TENSOR *source, TENSOR *fake_ab)
 	return image_lab2rgb(source);
 }
 
+// Image color model input: 1 x 4 x (-1) x (-1)， output: 1 x 2 x (-1) x (-1)
 int color_server(char *endpoint, int use_gpu)
 {
 	char *model;
+
+	InitEngineRunningTime();
+
 	model = getenv("COLOR_MODEL");
 	// image color_model:
 	// input:  lab with mask, l in [-0.5, 0.5], ab in [-1.0, 1.0], mask in [0, 1.0], and 1.0 is valid
 	// output: ab
 	if (! model || strncasecmp(model, "AI", 2) == 0) {
 		syslog_info("Color server is running on AI model ... ");
+
 		return OnnxService(endpoint, (char *)"image_color.onnx", IMAGE_COLOR_SERVICE, use_gpu);
 	}
 

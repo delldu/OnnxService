@@ -23,6 +23,7 @@
 #define MAKE_FOURCC(a,b,c,d) (((DWORD)(a) << 24) | ((DWORD)(b) << 16) | ((DWORD)(c) << 8) | ((DWORD)(d) << 0))
 #define ENGINE_MAGIC MAKE_FOURCC('O', 'N', 'R', 'T')
 
+
 extern void CheckStatus(OrtStatus * status);
 extern OrtValue *CreateOrtTensor(TENSOR * tensor, int gpu);
 extern OrtValue *SimpleForward(OrtEngine * engine, OrtValue * input_tensor);
@@ -315,8 +316,6 @@ OrtEngine *CreateEngineFromArray(void* model_data, size_t model_data_length, int
 	return t;
 }
 
-
-
 int ValidEngine(OrtEngine * t)
 {
 	return (!t || t->magic != ENGINE_MAGIC) ? 0 : 1;
@@ -401,21 +400,26 @@ int OnnxService(char *endpoint, char *onnx_file, int service_code, int use_gpu)
 {
 	int socket, count;
 	TENSOR *input_tensor, *output_tensor;
-	OrtEngine *engine;
+	OrtEngine *engine = NULL;
 
 	if ((socket = server_open(endpoint)) < 0)
 		return RET_ERROR;
 
-	engine = CreateEngine(onnx_file, use_gpu);
-	CheckEngine(engine);
-
 	count = 0;
 	for (;;) {
-		syslog_info("Service %d times", count);
+		if (EngineIsIdle())
+			StopEngine(engine);
+
+		if (! socket_readable(socket, 1000))	// timeout 1 s
+			continue;
 
 		input_tensor = service_request(socket, service_code);
-		if (!tensor_valid(input_tensor))
+		if (! tensor_valid(input_tensor))
 			continue;
+
+		syslog_info("Service %d times", count);
+		StartEngine(engine, onnx_file, use_gpu);
+		UpdateEngineRunningTime();
 
 		// Real service ...
 		time_reset();
@@ -429,7 +433,7 @@ int OnnxService(char *endpoint, char *onnx_file, int service_code, int use_gpu)
 
 		count++;
 	}
-	DestroyEngine(engine);
+	StopEngine(engine);
 
 	syslog(LOG_INFO, "Service shutdown.\n");
 	server_close(socket);
@@ -446,16 +450,22 @@ int OnnxServiceFromArray(char *endpoint,  void* model_data, size_t model_data_le
 	if ((socket = server_open(endpoint)) < 0)
 		return RET_ERROR;
 
-	engine = CreateEngineFromArray(model_data, model_data_length, use_gpu);
-	CheckEngine(engine);
-
 	count = 0;
 	for (;;) {
 		syslog_info("Service %d times", count);
 
-		input_tensor = service_request(socket, service_code);
-		if (!tensor_valid(input_tensor))
+		if (EngineIsIdle())
+			StopEngine(engine);
+
+		if (! socket_readable(socket, 1000))	// timeout 1 s
 			continue;
+
+		input_tensor = service_request(socket, service_code);
+		if (! tensor_valid(input_tensor))
+			continue;
+
+		StartEngineFromArray(engine, model_data, model_data_length, use_gpu);
+		UpdateEngineRunningTime();
 
 		// Real service ...
 		time_reset();
@@ -469,7 +479,7 @@ int OnnxServiceFromArray(char *endpoint,  void* model_data, size_t model_data_le
 
 		count++;
 	}
-	DestroyEngine(engine);
+	StopEngine(engine);
 
 	syslog(LOG_INFO, "Service shutdown.\n");
 	server_close(socket);
