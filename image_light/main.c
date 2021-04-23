@@ -24,7 +24,7 @@
 
 int server(char *endpoint, int use_gpu)
 {
-	return OnnxServiceFromArray(endpoint, image_light_onnx, image_light_onnx_len, use_gpu);
+	return OnnxServiceFromArray(endpoint, image_light_onnx, image_light_onnx_len, IMAGE_LIGHT_REQCODE, use_gpu);
 }
 
 int light(int socket, char *input_file)

@@ -17,7 +17,7 @@
 
 #include "engine.h"
 
-#define IMAGE_MATTING_REQCODE 0x0107
+#define IMAGE_MATTING_SERVICE 0x0107
 // #define IMAGE_MATTING_URL "ipc:///tmp/image_matting.ipc"
 #define IMAGE_MATTING_URL "tcp://127.0.0.1:9107"
 
@@ -115,13 +115,13 @@ TENSOR *matting_onnxrpc(int socket, TENSOR *send_tensor)
 	if (send_tensor->height == nh && send_tensor->width == nw) {
 		// Normal onnx RPC
 		normal_input(send_tensor);
-		recv_tensor = OnnxRPC(socket, send_tensor, IMAGE_MATTING_REQCODE);
+		recv_tensor = OnnxRPC(socket, send_tensor, IMAGE_MATTING_SERVICE);
 		normal_output(recv_tensor);
 	} else {
 		resize_send = tensor_zoom(send_tensor, nh, nw); CHECK_TENSOR(resize_send);
 
 		normal_input(resize_send);
-		resize_recv = OnnxRPC(socket, resize_send, IMAGE_MATTING_REQCODE);
+		resize_recv = OnnxRPC(socket, resize_send, IMAGE_MATTING_SERVICE);
 		normal_output(resize_recv);
 
 		recv_tensor = tensor_zoom(resize_recv, send_tensor->height, send_tensor->width);
@@ -134,7 +134,7 @@ TENSOR *matting_onnxrpc(int socket, TENSOR *send_tensor)
 
 int server(char *endpoint, int use_gpu)
 {
-	return OnnxService(endpoint, (char *)"image_matting.onnx", use_gpu);
+	return OnnxService(endpoint, (char *)"image_matting.onnx", IMAGE_MATTING_SERVICE, use_gpu);
 }
 
 int blend_mask(IMAGE *source_image, TENSOR *mask_tensor)

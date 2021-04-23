@@ -17,13 +17,13 @@
 
 #include "engine.h"
 
-#define IMAGE_CLEAN_REQCODE 0x0101
+#define IMAGE_CLEAN_SERVICE 0x0101
 // #define IMAGE_CLEAN_URL "ipc:///tmp/image_clean.ipc"
 #define IMAGE_CLEAN_URL "tcp://127.0.0.1:9101"
 
 int server(char *endpoint, int use_gpu)
 {
-	return OnnxService(endpoint, (char *)"image_clean.onnx", use_gpu);
+	return OnnxService(endpoint, (char *)"image_clean.onnx", IMAGE_CLEAN_SERVICE, use_gpu);
 }
 
 int clean(int socket, char *input_file)
@@ -40,7 +40,7 @@ int clean(int socket, char *input_file)
 		check_tensor(send_tensor);
 
 		// Clean server limited: only accept 4 times tensor !!!
-		recv_tensor = ResizeOnnxRPC(socket, send_tensor, IMAGE_CLEAN_REQCODE, 4);
+		recv_tensor = ResizeOnnxRPC(socket, send_tensor, IMAGE_CLEAN_SERVICE, 4);
 		if (tensor_valid(recv_tensor)) {
 			SaveTensorAsImage(recv_tensor, input_file);
 			tensor_destroy(recv_tensor);

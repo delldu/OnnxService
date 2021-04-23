@@ -397,9 +397,9 @@ void DestroyEngine(OrtEngine * engine)
 	free(engine);
 }
 
-int OnnxService(char *endpoint, char *onnx_file, int use_gpu)
+int OnnxService(char *endpoint, char *onnx_file, int service_code, int use_gpu)
 {
-	int socket, reqcode, count, rescode = -1;
+	int socket, count;
 	TENSOR *input_tensor, *output_tensor;
 	OrtEngine *engine;
 
@@ -413,28 +413,17 @@ int OnnxService(char *endpoint, char *onnx_file, int use_gpu)
 	for (;;) {
 		syslog_info("Service %d times", count);
 
-		input_tensor = request_recv(socket, &reqcode);
-
-		if (!tensor_valid(input_tensor)) {
-			syslog_error("Request receive tensor ...");
+		input_tensor = service_request(socket, service_code);
+		if (!tensor_valid(input_tensor))
 			continue;
-		}
-		syslog_info("Request Code = 0x%x", reqcode);
 
 		// Real service ...
 		time_reset();
 		output_tensor = TensorForward(engine, input_tensor);
 		time_spend((char *)"Predict");
 
-		if (tensor_valid(output_tensor)) {
-			rescode = reqcode;
-			response_send(socket, output_tensor, rescode);
-			tensor_destroy(output_tensor);
-		} else {
-			// Echo response with error -1
-			CheckPoint("--------------------------------------------------!!!!!!!!!!!!!! !");
-			response_send(socket, input_tensor, -1);
-		}
+		service_response(socket, service_code, output_tensor);
+		tensor_destroy(output_tensor);
 
 		tensor_destroy(input_tensor);
 
@@ -448,9 +437,9 @@ int OnnxService(char *endpoint, char *onnx_file, int use_gpu)
 	return RET_OK;
 }
 
-int OnnxServiceFromArray(char *endpoint,  void* model_data, size_t model_data_length, int use_gpu)
+int OnnxServiceFromArray(char *endpoint,  void* model_data, size_t model_data_length, int service_code, int use_gpu)
 {
-	int socket, reqcode, count, rescode = -1;
+	int socket, count;
 	TENSOR *input_tensor, *output_tensor;
 	OrtEngine *engine;
 
@@ -464,28 +453,17 @@ int OnnxServiceFromArray(char *endpoint,  void* model_data, size_t model_data_le
 	for (;;) {
 		syslog_info("Service %d times", count);
 
-		input_tensor = request_recv(socket, &reqcode);
-
-		if (!tensor_valid(input_tensor)) {
-			syslog_error("Request receive tensor ...");
+		input_tensor = service_request(socket, service_code);
+		if (!tensor_valid(input_tensor))
 			continue;
-		}
-		syslog_info("Request Code = 0x%x", reqcode);
 
 		// Real service ...
 		time_reset();
 		output_tensor = TensorForward(engine, input_tensor);
 		time_spend((char *)"Predict");
 
-		if (tensor_valid(output_tensor)) {
-			rescode = reqcode;
-			response_send(socket, output_tensor, rescode);
-			tensor_destroy(output_tensor);
-		} else {
-			// Echo response with error -1
-			CheckPoint("--------------------------------------------------!!!!!!!!!!!!!! !");
-			response_send(socket, input_tensor, -1);
-		}
+		service_response(socket, service_code, output_tensor);
+		tensor_destroy(output_tensor);
 
 		tensor_destroy(input_tensor);
 
@@ -508,8 +486,8 @@ TENSOR *OnnxRPC(int socket, TENSOR * input, int reqcode)
 
 	CHECK_TENSOR(input);
 
-	if (request_send(socket, reqcode, input) == RET_OK) {
-		output = response_recv(socket, &rescode);
+	if (tensor_send(socket, reqcode, input) == RET_OK) {
+		output = tensor_recv(socket, &rescode);
 	}
     if (rescode != reqcode) {
     	// Bad service response

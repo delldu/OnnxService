@@ -17,7 +17,7 @@
 
 #include "engine.h"
 
-#define VIDEO_SLOW_REQCODE 0x0203
+#define VIDEO_SLOW_SERVICE 0x0203
 // #define VIDEO_SLOW_URL "ipc:///tmp/image_facegan.ipc"
 #define VIDEO_SLOW_URL "tcp://127.0.0.1:9203"
 
@@ -227,7 +227,7 @@ TENSOR *slow_do(OrtEngine *fc, OrtEngine *at, TENSOR *input_tensor, int scale)
 
 int SlowService(char *endpoint, int use_gpu)
 {
-	int socket, reqcode, lambda, rescode;
+	int socket, lambda;
 	TENSOR *input_tensor, *output_tensor;
 	OrtEngine *fc_engine = NULL;
 	OrtEngine *at_engine = NULL;
@@ -247,24 +247,17 @@ int SlowService(char *endpoint, int use_gpu)
 	for (;;) {
 		syslog_info("Service %d times", lambda);
 
-		input_tensor = request_recv(socket, &reqcode);
-
-		if (!tensor_valid(input_tensor)) {
-			syslog_error("Request receive tensor ...");
+		input_tensor = service_request(socket, VIDEO_SLOW_SERVICE);
+		if (!tensor_valid(input_tensor))
 			continue;
-		}
-		syslog_info("Request Code = %d", reqcode);
 
 		// Real service ...
 		time_reset();
 		output_tensor = slow_do(fc_engine, at_engine, input_tensor, 4 /*scale */);
-		time_spend((char *)"Infer");
+		time_spend((char *)"Video slowing");
 
-		if (tensor_valid(output_tensor)) {
-			rescode = reqcode;
-			response_send(socket, output_tensor, rescode);
-			tensor_destroy(output_tensor);
-		}
+		service_response(socket, VIDEO_SLOW_SERVICE, output_tensor);
+		tensor_destroy(output_tensor);
 
 		tensor_destroy(input_tensor);
 
@@ -346,7 +339,7 @@ int slow(int socket, char *input_file1, char *input_file2)
 	check_tensor(send_tensor);
 
 	// Server limited: only accept 8 times tensor !!!
-	recv_tensor = ZeropadOnnxRPC(socket, send_tensor, VIDEO_SLOW_REQCODE, 8);
+	recv_tensor = ZeropadOnnxRPC(socket, send_tensor, VIDEO_SLOW_SERVICE, 8);
 	if (tensor_valid(recv_tensor)) {
 		slow_save(recv_tensor);
 		tensor_destroy(recv_tensor);

@@ -17,7 +17,7 @@
 
 #include "engine.h"
 
-#define IMAGE_COLOR_REQCODE 0x0102
+#define IMAGE_COLOR_SERVICE 0x0102
 // #define IMAGE_COLOR_URL "ipc:///tmp/image_color.ipc"
 #define IMAGE_COLOR_URL "tcp://127.0.0.1:9102"
 
@@ -193,7 +193,7 @@ int color_server(char *endpoint, int use_gpu)
 	// output: ab
 	if (! model || strncasecmp(model, "AI", 2) == 0) {
 		syslog_info("Color server is running on AI model ... ");
-		return OnnxService(endpoint, (char *)"image_color.onnx", use_gpu);
+		return OnnxService(endpoint, (char *)"image_color.onnx", IMAGE_COLOR_SERVICE, use_gpu);
 	}
 
 	// Tradition model
@@ -215,7 +215,7 @@ int color_client(int socket, char *input_file)
 		send_tensor = color_normlab(send_image);
 		check_tensor(send_tensor);
 
-		recv_tensor = ZeropadOnnxRPC(socket, send_tensor, IMAGE_COLOR_REQCODE, 8);
+		recv_tensor = ZeropadOnnxRPC(socket, send_tensor, IMAGE_COLOR_SERVICE, 8);
 		if (tensor_valid(recv_tensor)) {
 			ouput_rgb_tensor = blend_fake(send_tensor, recv_tensor);
 			SaveTensorAsImage(ouput_rgb_tensor, input_file);

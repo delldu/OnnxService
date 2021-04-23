@@ -17,7 +17,7 @@
 
 #include "engine.h"
 
-#define IMAGE_ZOOM_REQCODE 0x0105
+#define IMAGE_ZOOM_SERVICE 0x0105
 // #define IMAGE_ZOOM_URL "ipc:///tmp/image_zoom.ipc"
 #define IMAGE_ZOOM_URL "tcp://127.0.0.1:9105"
 
@@ -33,7 +33,7 @@ int server(char *endpoint, int use_gpu)
 
 	syslog_info("Zoom model: %s ... ", model);
 
-	return OnnxService(endpoint, model, use_gpu);
+	return OnnxService(endpoint, model, IMAGE_ZOOM_SERVICE, use_gpu);
 }
 
 int zoom(int socket, char *input_file)
@@ -49,7 +49,7 @@ int zoom(int socket, char *input_file)
 		send_tensor = tensor_from_image(send_image, 0);
 		check_tensor(send_tensor);
 
-		recv_tensor = OnnxRPC(socket, send_tensor, IMAGE_ZOOM_REQCODE);
+		recv_tensor = OnnxRPC(socket, send_tensor, IMAGE_ZOOM_SERVICE);
 		if (tensor_valid(recv_tensor)) {
 			SaveTensorAsImage(recv_tensor, input_file);
 			tensor_destroy(recv_tensor);

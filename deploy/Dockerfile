@@ -5,7 +5,6 @@
 #***
 #************************************************************************************/
 #
-
 # Runner docker is for deployment ...
 
 # Dependencies: onnxruntime-gpu 1.6, cuda-10.2 (Driver version 440.95.01), cudnn8 and basic system files ...
@@ -24,22 +23,12 @@ ENV CUDNN_VERSION=8.0.5.39
 WORKDIR /home
 
 RUN apt-get update && \
-	apt-get install -y --no-install-recommends gnupg2 curl wget ca-certificates openssh-client && \
-    curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/7fa2af80.pub | apt-key add - && \
-    echo "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64 /" > /etc/apt/sources.list.d/cuda.list && \
-    echo "deb https://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu1804/x86_64 /" > /etc/apt/sources.list.d/nvidia-ml.list && \
-	ssh -f -N -D 127.0.0.1:1080 ubuntu@23.248.162.51 && \
-	apt-get -o Acquire::http::proxy="socks5h://127.0.0.1:1080/" update && \
-    rm -rf /var/lib/apt/lists/*
-
-# apt-get update
-# apt-get install -y wget openssh-client net-tools gnupg2
-# ssh -f -N -D 127.0.0.1:1080 ubuntu@23.248.162.51
-# wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/cuda-ubuntu1804.pin
-# mv cuda-ubuntu1804.pin /etc/apt/preferences.d/cuda-repository-pin-600
-# apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/7fa2af80.pub
-# echo "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/ /" >> /etc/apt/sources.list
-# apt-get -o Acquire::http::proxy="socks5h://127.0.0.1:1080/" update
+	apt-get install -y wget openssh-client net-tools gnupg2 && \
+	wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/cuda-ubuntu1804.pin && \
+	mv cuda-ubuntu1804.pin /etc/apt/preferences.d/cuda-repository-pin-600 && \
+	apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/7fa2af80.pub && \
+	echo "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/ /" >> /etc/apt/sources.list && \
+	apt-get update
 
 # Install CUDA 10.2
 RUN apt-get update && apt-get install -y --no-install-recommends cuda-cudart-$CUDA_PKG_VERSION cuda-compat-10-2 && \
@@ -79,7 +68,7 @@ RUN apt-get update && \
 # 	apt-get clean
 
 # 2. Add onnxruntime libs ...
-ADD temp/ /
+# ADD temp/ /
 
 
 # EXPOSE 9101 9102 9103 9104 9105 9106 9107 9108 9109 9201 9202 9203

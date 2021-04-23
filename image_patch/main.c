@@ -17,13 +17,13 @@
 
 #include "engine.h"
 
-#define IMAGE_PATCH_REQCODE 0x0104
+#define IMAGE_PATCH_SERVICE 0x0104
 // #define IMAGE_PATCH_URL "ipc:///tmp/image_patch.ipc"
 #define IMAGE_PATCH_URL "tcp://127.0.0.1:9104"
 
 int server(char *endpoint, int use_gpu)
 {
-	return OnnxService(endpoint, (char *)"image_patch.onnx", use_gpu);
+	return OnnxService(endpoint, (char *)"image_patch.onnx", IMAGE_PATCH_SERVICE, use_gpu);
 }
 
 int patch(int socket, char *input_file)
@@ -40,7 +40,7 @@ int patch(int socket, char *input_file)
 		check_tensor(send_tensor);
 
 		// Server only accept 128 times 
-		recv_tensor = ZeropadOnnxRPC(socket, send_tensor, IMAGE_PATCH_REQCODE, 128);
+		recv_tensor = ZeropadOnnxRPC(socket, send_tensor, IMAGE_PATCH_SERVICE, 128);
 		if (tensor_valid(recv_tensor)) {
 			SaveTensorAsImage(recv_tensor, input_file);
 			tensor_destroy(recv_tensor);

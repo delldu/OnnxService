@@ -17,13 +17,13 @@
 
 #include "engine.h"
 
-#define IMAGE_NIMA_REQCODE 0x0103
+#define IMAGE_NIMA_SERVICE 0x0103
 // #define IMAGE_NIMA_URL "ipc:///tmp/image_nima.ipc"
 #define IMAGE_NIMA_URL "tcp://127.0.0.1:9103"
 
 int server(char *endpoint, int use_gpu)
 {
-	return OnnxService(endpoint, (char *)"image_nima.onnx", use_gpu);
+	return OnnxService(endpoint, (char *)"image_nima.onnx", IMAGE_NIMA_SERVICE, use_gpu);
 }
 
 void dump(TENSOR * recv_tensor, char *filename)
@@ -52,7 +52,7 @@ int nima(int socket, char *input_file)
 		send_tensor = tensor_from_image(send_image, 0);	// 1x3x244x244
 		check_tensor(send_tensor);
 
-		recv_tensor = OnnxRPC(socket, send_tensor, IMAGE_NIMA_REQCODE);
+		recv_tensor = OnnxRPC(socket, send_tensor, IMAGE_NIMA_SERVICE);
 		if (tensor_valid(recv_tensor)) {
 			dump(recv_tensor, input_file);
 			tensor_destroy(recv_tensor);

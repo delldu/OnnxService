@@ -17,8 +17,8 @@
 
 #include "engine.h"
 
-#define VIDEO_COLOR_REQCODE 0x0202
-#define VIDEO_REFERENCE_REQCODE 0x0212
+#define VIDEO_COLOR_SERVICE 0x0202
+#define VIDEO_REFERENCE_SERVICE 0x0212
 // #define VIDEO_COLOR_URL "ipc:///tmp/video_color.ipc"
 #define VIDEO_COLOR_URL "tcp://127.0.0.1:9202"
 TENSOR *reference_rgb512_tensor = NULL;
@@ -195,7 +195,7 @@ TENSOR *color_do(OrtEngine *align_engine, OrtEngine *color_engine, TENSOR *input
 
 int ColorService(char *endpoint, int use_gpu)
 {
-	int socket, reqcode, lambda, rescode;
+	int socket, reqcode, lambda;
 	TENSOR *input_tensor, *output_tensor;
 	OrtEngine *color_engine = NULL;
 	OrtEngine *align_engine = NULL;
@@ -215,15 +215,11 @@ int ColorService(char *endpoint, int use_gpu)
 	for (;;) {
 		syslog_info("Service %d times", lambda);
 
-		input_tensor = request_recv(socket, &reqcode);
-
-		if (!tensor_valid(input_tensor)) {
-			syslog_error("Request receive tensor ...");
+		input_tensor = service_request_withcode(socket, &reqcode);
+		if (!tensor_valid(input_tensor))
 			continue;
-		}
-		syslog_info("Request Code = %d", reqcode);
 
-		if (reqcode == VIDEO_REFERENCE_REQCODE) {
+		if (reqcode == VIDEO_REFERENCE_SERVICE) {
 			// Save tensor to global reference tensor
 			tensor_destroy(reference_rgb512_tensor);
 			reference_rgb512_tensor = tensor_zoom(input_tensor, 512, 512);
@@ -238,7 +234,7 @@ int ColorService(char *endpoint, int use_gpu)
 			tensor_zero(last_lab512_tensor);
 
 			// Respone echo input_tensor ...
-			response_send(socket, input_tensor, VIDEO_REFERENCE_REQCODE);
+			tensor_send(socket, VIDEO_REFERENCE_SERVICE, input_tensor);
 
 			// Next for service ...
 			tensor_destroy(input_tensor);
@@ -248,13 +244,10 @@ int ColorService(char *endpoint, int use_gpu)
 		// Real service ...
 		time_reset();
 		output_tensor = color_do(align_engine, color_engine, input_tensor);
-		time_spend((char *)"Infer");
+		time_spend((char *)"Video coloring");
 
-		if (tensor_valid(output_tensor)) {
-			rescode = reqcode;
-			response_send(socket, output_tensor, rescode);
-			tensor_destroy(output_tensor);
-		}
+		service_response(socket, VIDEO_COLOR_SERVICE, output_tensor);
+		tensor_destroy(output_tensor);
 
 		tensor_destroy(input_tensor);
 
@@ -364,7 +357,7 @@ int main(int argc, char **argv)
 			else
 				printf("Video coloring file %s ...\n", argv[i]);
 
-			reqcode = (i == optind)? VIDEO_REFERENCE_REQCODE : VIDEO_COLOR_REQCODE;
+			reqcode = (i == optind)? VIDEO_REFERENCE_SERVICE : VIDEO_COLOR_SERVICE;
 			send_tensor = color_load(argv[i]);
 
 			if (tensor_valid(send_tensor)) {

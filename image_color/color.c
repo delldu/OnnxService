@@ -21,6 +21,7 @@
 #define WINDOW_RADIUS	1
 #define WINDOW_WIDTH	(2*WINDOW_RADIUS + 1)
 #define WINDOW_PIXELS	(WINDOW_WIDTH*WINDOW_WIDTH)
+#define IMAGE_COLOR_SERVICE 0x0102
 
 
 typedef Eigen::Triplet<double> TD;
@@ -296,7 +297,7 @@ TENSOR *do_color(TENSOR *input_tensor)
 
 int ClassicService(char *endpoint, int use_gpu)
 {
-	int socket, reqcode, count, rescode;
+	int socket, count;
 	TENSOR *input_tensor, *output_tensor;
 
 	(void)use_gpu;
@@ -308,29 +309,17 @@ int ClassicService(char *endpoint, int use_gpu)
 	for (;;) {
 		syslog_info("Service %d times", count);
 
-		input_tensor = request_recv(socket, &reqcode);
-
-		if (!tensor_valid(input_tensor)) {
-			syslog_error("Request receive tensor ...");
+		input_tensor = service_request(socket, IMAGE_COLOR_SERVICE);
+		if (!tensor_valid(input_tensor))
 			continue;
-		}
-		syslog_info("Request Code = 0x%x", reqcode);
 
 		// Real service ...
 		time_reset();
-
 		output_tensor = do_color(input_tensor);
+		time_spend((char *)"Image coloring");
 
-		time_spend((char *)"Predict");
-
-		if (tensor_valid(output_tensor)) {
-			rescode = reqcode;
-			response_send(socket, output_tensor, rescode);
-			tensor_destroy(output_tensor);
-		} else {
-			// If failure, echo response !!!
-			response_send(socket, input_tensor, -1);
-		}
+        service_response(socket, IMAGE_COLOR_SERVICE, output_tensor);
+        tensor_destroy(output_tensor);
 
 		tensor_destroy(input_tensor);
 

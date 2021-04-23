@@ -19,7 +19,7 @@
 #include "engine.h"
 #include "cmaes.h"
 
-#define IMAGE_FACEGAN_REQCODE 0x0108
+#define IMAGE_FACEGAN_SERVICE 0x0108
 // #define IMAGE_FACEGAN_URL "ipc:///tmp/image_facegan.ipc"
 #define IMAGE_FACEGAN_URL "tcp://127.0.0.1:9108"
 
@@ -394,7 +394,7 @@ TENSOR *wcode_search(TENSOR *reference_tensor)
 
 int FaceGanService(char *endpoint, int use_gpu)
 {
-	int socket, reqcode, lambda, rescode;
+	int socket, lambda;
 	TENSOR *input_tensor, *output_tensor, *wcode_tensor;
 
 	srand(time(NULL));
@@ -415,13 +415,9 @@ int FaceGanService(char *endpoint, int use_gpu)
 	for (;;) {
 		syslog_info("Service %d times", lambda);
 
-		input_tensor = request_recv(socket, &reqcode);
-
-		if (!tensor_valid(input_tensor)) {
-			syslog_error("Request recv bad tensor ...");
+		input_tensor = service_request(socket, IMAGE_FACEGAN_SERVICE);
+		if (!tensor_valid(input_tensor))
 			continue;
-		}
-		syslog_info("-------------------- Request Code = %d", reqcode);
 
 		// Real service ...
 		time_reset();
@@ -431,13 +427,12 @@ int FaceGanService(char *endpoint, int use_gpu)
 		time_spend((char *)"Infer");
 
 		if (tensor_valid(output_tensor)) {
-			rescode = reqcode;
-#if 1	// For debug			
+#if 0	// For debug			
 			IMAGE *image = image_from_tensor(output_tensor, 0);
 			image_save(image, "output/last.png");
 			image_destroy(image);
 #endif
-			response_send(socket, output_tensor, rescode);
+			service_response(socket, IMAGE_FACEGAN_SERVICE, output_tensor);
 			tensor_destroy(output_tensor);
 		}
 
@@ -476,7 +471,7 @@ int facegan(int socket, char *input_file)
 		send_tensor = tensor_from_image(resize_send_image, 0);
 		check_tensor(send_tensor);
 
-		recv_tensor = OnnxRPC(socket, send_tensor, IMAGE_FACEGAN_REQCODE);
+		recv_tensor = OnnxRPC(socket, send_tensor, IMAGE_FACEGAN_SERVICE);
 		if (tensor_valid(recv_tensor)) {
 			SaveTensorAsImage(recv_tensor, input_file);
 			tensor_destroy(recv_tensor);

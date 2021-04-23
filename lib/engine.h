@@ -44,8 +44,8 @@ int ValidEngine(OrtEngine * engine);
 TENSOR *TensorForward(OrtEngine * engine, TENSOR * input);
 void DestroyEngine(OrtEngine * engine);
 
-int OnnxService(char *endpoint, char *onnx_file, int use_gpu);
-int OnnxServiceFromArray(char *endpoint, void* model_data, size_t model_data_length, int use_gpu);
+int OnnxService(char *endpoint, char *onnx_file, int service_code, int use_gpu);
+int OnnxServiceFromArray(char *endpoint, void* model_data, size_t model_data_length, int service_code, int use_gpu);
 
 TENSOR *OnnxRPC(int socket, TENSOR * input, int reqcode);
 TENSOR *ResizeOnnxRPC(int socket, TENSOR *send_tensor, int reqcode, int multiples);
