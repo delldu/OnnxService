@@ -6,8 +6,8 @@
 #***
 #************************************************************************************/
 #
-INSTALL_DIR := /usr/local
-ONNXRUNTIME_INSTALL_DIR := /opt/onnxruntime
+INSTALL_DIR := $(shell grep INSTALL_DIR ../Makefile | cut -d '=' -f 2)
+ONNXRUNTIME_INSTALL_DIR := $(shell grep ONNXRUNTIME_INSTALL_DIR ../Makefile | cut -d '=' -f 2)
 
 TARGET := image_nima
 

@@ -6,6 +6,8 @@
 #***
 #************************************************************************************/
 #
+INSTALL_DIR=/usr/local
+ONNXRUNTIME_INSTALL_DIR=/opt/onnxruntime
 
 XSUBDIRS :=  \
 	lib \
