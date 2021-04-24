@@ -399,7 +399,7 @@ int FaceGanService(char *endpoint, int use_gpu)
 
 	srand(time(NULL));
 
-	InitEngineRunningTime();
+	InitEngineRunningTime(); // Avoid compiler complaint
 
 	if ((socket = server_open(endpoint)) < 0)
 		return RET_ERROR;

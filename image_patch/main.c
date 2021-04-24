@@ -24,7 +24,7 @@
 int server(char *endpoint, int use_gpu)
 {
 	// Patch model input: 1 x 4 x (-1) x (-1), 1 x 3 x (-1) x (-1)
-	InitEngineRunningTime();
+	InitEngineRunningTime(); // Avoid compiler complaint
 	return OnnxService(endpoint, (char *)"image_patch.onnx", IMAGE_PATCH_SERVICE, use_gpu);
 }
 

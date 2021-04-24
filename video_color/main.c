@@ -233,7 +233,6 @@ int ColorService(char *endpoint, int use_gpu)
 
 		StartEngine(align_engine, (char *)"video_align.onnx", use_gpu);
 		StartEngine(color_engine, (char *)"video_color.onnx", use_gpu);
-		UpdateEngineRunningTime();
 
 		if (reqcode == VIDEO_REFERENCE_SERVICE) {
 			// Save tensor to global reference tensor

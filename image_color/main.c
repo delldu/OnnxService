@@ -189,7 +189,7 @@ int color_server(char *endpoint, int use_gpu)
 {
 	char *model;
 
-	InitEngineRunningTime();
+	InitEngineRunningTime(); // Avoid compiler complaint
 
 	model = getenv("COLOR_MODEL");
 	// image color_model:

@@ -34,12 +34,10 @@ extern void DestroyOrtTensor(OrtValue * tensor);
 
 const OrtApi *onnx_runtime_api = OrtGetApiBase()->GetApi(ORT_API_VERSION);
 
-
 void InitInputNodes(OrtEngine * t)
 {
 	size_t num_nodes;
 	size_t num_dims;
-	int64_t input_node_dims[4];
 	OrtAllocator *allocator;
 	CheckStatus(onnx_runtime_api->GetAllocatorWithDefaultOptions(&allocator));
 
@@ -62,18 +60,18 @@ void InitInputNodes(OrtEngine * t)
 		CheckStatus(onnx_runtime_api->GetTensorElementType(tensor_info, &type));
 
 		CheckStatus(onnx_runtime_api->GetDimensionsCount(tensor_info, &num_dims));
-		if (num_dims > 4)
-			num_dims = 4;
+		if (num_dims > sizeof(t->input_node_dims))
+			num_dims = sizeof(t->input_node_dims);
 
 		printf("    no=%zu name=\"%s\" type=%d dims=%zu: ", i, name, type, num_dims);
 
-		CheckStatus(onnx_runtime_api->GetDimensions(tensor_info, (int64_t *) input_node_dims, num_dims));
+		CheckStatus(onnx_runtime_api->GetDimensions(tensor_info, (int64_t *) t->input_node_dims, num_dims));
 
 		for (size_t j = 0; j < num_dims; j++) {
 			if (j < num_dims - 1)
-				printf("%jd x ", input_node_dims[j]);	// xxxx8888
+				printf("%d x ", (int)t->input_node_dims[j]);
 			else
-				printf("%jd\n", input_node_dims[j]);
+				printf("%d\n", (int)t->input_node_dims[j]);
 		}
 
 		onnx_runtime_api->ReleaseTypeInfo(typeinfo);
@@ -84,8 +82,6 @@ void InitInputNodes(OrtEngine * t)
 void InitOutputNodes(OrtEngine * t)
 {
 	size_t num_dims;
-	int64_t output_node_dims[4];
-
 	OrtAllocator *allocator;
 
 	CheckStatus(onnx_runtime_api->GetAllocatorWithDefaultOptions(&allocator));
@@ -110,16 +106,16 @@ void InitOutputNodes(OrtEngine * t)
 		CheckStatus(onnx_runtime_api->GetTensorElementType(tensor_info, &type));
 
 		CheckStatus(onnx_runtime_api->GetDimensionsCount(tensor_info, &num_dims));
-		if (num_dims > 4)
-			num_dims = 4;
+		if (num_dims > sizeof(t->output_node_dims))
+			num_dims = sizeof(t->output_node_dims);
 		printf("    no=%zu name=\"%s\" type=%d dims=%zu: ", i, name, type, num_dims);
 
-		CheckStatus(onnx_runtime_api->GetDimensions(tensor_info, (int64_t *) output_node_dims, num_dims));
-		for (size_t j = 0; j < num_dims; j++) {
+		CheckStatus(onnx_runtime_api->GetDimensions(tensor_info, (int64_t *) t->output_node_dims, num_dims));
+		for (size_t j = 0; j < num_dims && j < sizeof(t->output_node_dims); j++) {
 			if (j < num_dims - 1)
-				printf("%jd x ", output_node_dims[j]);
+				printf("%d x ", (int)t->output_node_dims[j]);
 			else
-				printf("%jd\n", output_node_dims[j]);
+				printf("%d\n", (int)t->output_node_dims[j]);
 		}
 
 		onnx_runtime_api->ReleaseTypeInfo(typeinfo);
@@ -350,13 +346,26 @@ TENSOR *TensorForward(OrtEngine * engine, TENSOR * input)
 	size_t i, size, n_dims;
 	int64_t dims[4];
 	OrtValue *input_ortvalue, *output_ortvalue;
+	TENSOR *temp_tensor;
 	TENSOR *output = NULL;
 
 	CHECK_TENSOR(input);
 
-	input_ortvalue = CreateOrtTensor(input, engine->use_gpu);
+	// Format input ...
+	dims[0] = input->batch;
+	dims[1] = input->chan;
+	dims[2] = input->height;
+	dims[3] = input->width;
+	for (i = 0; i < 4; i++)
+		dims[i] = MAX(dims[i], (int)engine->input_node_dims[i]);
+	temp_tensor = tensor_reshape(input, dims[0], dims[1], dims[2], dims[3]);
+	CHECK_TENSOR(temp_tensor);
+	input_ortvalue = CreateOrtTensor(temp_tensor, engine->use_gpu);
+	tensor_destroy(temp_tensor);
 
 	output_ortvalue = SimpleForward(engine, input_ortvalue);
+
+	// Format output ...
 	if (ValidOrtTensor(output_ortvalue)) {
 		n_dims = OrtTensorDimensions(output_ortvalue, dims);
 		if (n_dims > 0) {
@@ -378,6 +387,33 @@ TENSOR *TensorForward(OrtEngine * engine, TENSOR * input)
 	DestroyOrtTensor(input_ortvalue);
 
 	return output;
+}
+
+void DumpEngine(OrtEngine * engine)
+{
+	char buf[256];
+
+	if (ValidEngine(engine)) {
+		syslog_info("Engine:");
+
+		snprintf(buf, sizeof(buf) - 1, "    Input %s: %d x %d %d x %d",
+			engine->input_node_names[0],
+			(int)engine->input_node_dims[0],
+			(int)engine->input_node_dims[1],
+			(int)engine->input_node_dims[2],
+			(int)engine->input_node_dims[3]);
+		syslog_info("%s",buf);
+
+		snprintf(buf, sizeof(buf) - 1, "    Output %s: %d x %d %d x %d",
+			engine->output_node_names[0],
+			(int)engine->output_node_dims[0],
+			(int)engine->output_node_dims[1],
+			(int)engine->output_node_dims[2],
+			(int)engine->output_node_dims[3]);
+		syslog_info("%s", buf);
+	} else {
+		syslog_info("Engine == NULL");
+	}
 }
 
 void DestroyEngine(OrtEngine * engine)
@@ -419,7 +455,6 @@ int OnnxService(char *endpoint, char *onnx_file, int service_code, int use_gpu)
 
 		syslog_info("Service %d times", count);
 		StartEngine(engine, onnx_file, use_gpu);
-		UpdateEngineRunningTime();
 
 		// Real service ...
 		time_reset();
@@ -465,7 +500,6 @@ int OnnxServiceFromArray(char *endpoint,  void* model_data, size_t model_data_le
 			continue;
 
 		StartEngineFromArray(engine, model_data, model_data_length, use_gpu);
-		UpdateEngineRunningTime();
 
 		// Real service ...
 		time_reset();

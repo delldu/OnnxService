@@ -34,7 +34,7 @@ int server(char *endpoint, int use_gpu)
 
 	syslog_info("Zoom model: %s ... ", model);
 
-	InitEngineRunningTime();
+	InitEngineRunningTime(); // Avoid compiler complaint
 
 	return OnnxService(endpoint, model, IMAGE_ZOOM_SERVICE, use_gpu);
 }

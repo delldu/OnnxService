@@ -25,6 +25,10 @@ typedef struct {
 	OrtSession *session;
 	OrtSessionOptions *session_options;
 
+	// Last i/o node dims
+	int64_t input_node_dims[4];
+	int64_t output_node_dims[4];
+
 	std::vector < const char *>input_node_names;
 	std::vector < const char *>output_node_names;
 } OrtEngine;
@@ -42,6 +46,7 @@ OrtEngine *CreateEngineFromArray(void* model_data, size_t model_data_length, int
 
 int ValidEngine(OrtEngine * engine);
 TENSOR *TensorForward(OrtEngine * engine, TENSOR * input);
+void DumpEngine(OrtEngine * engine);
 void DestroyEngine(OrtEngine * engine);
 
 int OnnxService(char *endpoint, char *onnx_file, int service_code, int use_gpu);
@@ -63,27 +68,26 @@ do { \
 	if (engine == NULL) \
 		engine = CreateEngine(onnx_file, use_gpu); \
 	CheckEngine(engine); \
+	engine_last_running_time = time_now(); \
 } while(0)
 
 #define StartEngineFromArray(engine, model_data, model_data_length, use_gpu) \
 do { \
 	if (engine == NULL) { \
-		syslog_info("---- Start Engine ..."); \
 		engine = CreateEngineFromArray(model_data, model_data_length, use_gpu); \
 	} \
 	CheckEngine(engine); \
+	engine_last_running_time = time_now(); \
 } while(0)
 
 #define StopEngine(engine) \
 do { \
-	syslog_info("---- Stop Engine ..."); \
+	engine_last_running_time = time_now(); \
 	DestroyEngine(engine); \
 	engine = NULL; \
-	engine_last_running_time = time_now(); \
 } while(0)
 
 #define InitEngineRunningTime() do { engine_last_running_time = 0; } while(0)
 #define EngineIsIdle() (time_now() - engine_last_running_time > ENGINE_IDLE_TIME)
-#define UpdateEngineRunningTime() do { engine_last_running_time = time_now(); } while(0)
 
 #endif // _ENGINE_H

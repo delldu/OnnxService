@@ -264,7 +264,6 @@ int SlowService(char *endpoint, int use_gpu)
 
 		StartEngine(fc_engine, (char *)"video_slow_fc.onnx", use_gpu);
 		StartEngine(at_engine, (char *)"video_slow_at.onnx", use_gpu);
-		UpdateEngineRunningTime();
 
 		// Real service ...
 		time_reset();

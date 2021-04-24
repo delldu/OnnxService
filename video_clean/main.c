@@ -47,7 +47,6 @@ int ColorService(char *endpoint, int use_gpu)
 
 		syslog_info("Service %d times", count);
 		StartEngine(clean_engine, (char *)"video_clean.onnx", use_gpu);
-		UpdateEngineRunningTime();
 
 		// Real service ...
 		time_reset();

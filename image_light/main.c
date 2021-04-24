@@ -25,7 +25,7 @@
 int server(char *endpoint, int use_gpu)
 {
 	// Lighting model input: 1x3x(-1)x(-1), output 1x3x(-1)x(-1)
-	InitEngineRunningTime();
+	InitEngineRunningTime(); // Avoid compiler complaint
 	return OnnxServiceFromArray(endpoint, image_light_onnx, image_light_onnx_len, IMAGE_LIGHT_REQCODE, use_gpu);
 }
 
