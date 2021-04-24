@@ -17,23 +17,70 @@
 
 #include "engine.h"
 
-
 // Patch model input: 1 x 3 x (-1) x (-1), 1 x 3 x (-1) x (-1)
 int server(char *endpoint, int use_gpu)
 {
-	char *model;
+	int socket, count, msgcode;
+	TENSOR *input_tensor, *output_tensor;
+	OrtEngine *engine = NULL;
+	OrtEngine *pan_engine = NULL;
 
-	model = getenv("ZOOM_MODEL");
-	if (! model || model[0] == 'S' || model[0] == 's')
-		model = (char *)"image_zooms.onnx";
-	else
-		model = (char *)"image_zoom.onnx";
+	if ((socket = server_open(endpoint)) < 0)
+		return RET_ERROR;
 
-	syslog_info("Zoom model: %s ... ", model);
+	count = 0;
+	for (;;) {
+		if (EngineIsIdle()) {
+			StopEngine(engine);
+			StopEngine(pan_engine);
+		}
 
-	InitEngineRunningTime(); // Avoid compiler complaint
+		if (! socket_readable(socket, 1000))	// timeout 1 s
+			continue;
 
-	return OnnxService(endpoint, model, IMAGE_ZOOM_SERVICE, use_gpu, NULL);
+		input_tensor = service_request(socket, &msgcode);
+		if (! tensor_valid(input_tensor))
+			continue;
+
+		if (msgcode == IMAGE_ZOOM_SERVICE) {
+			syslog_info("Service %d times", count);
+			StartEngine(engine, (char *)"image_zoom.onnx", use_gpu);
+
+			// Real service ...
+			time_reset();
+			output_tensor = TensorForward(engine, input_tensor);
+			time_spend((char *)"Image zoom4x");
+
+			service_response(socket, IMAGE_ZOOM_SERVICE, output_tensor);
+			tensor_destroy(output_tensor);
+
+			count++;
+		} else if (msgcode == IMAGE_ZOOM_SERVICE_WITH_PAN) {
+			syslog_info("Service %d times", count);
+			StartEngine(pan_engine, (char *)"image_zooms.onnx", use_gpu);
+
+			// Real service ...
+			time_reset();
+			output_tensor = TensorForward(pan_engine, input_tensor);
+			time_spend((char *)"Image zoom4x with PAN");
+
+			service_response(socket, IMAGE_ZOOM_SERVICE, output_tensor);
+			tensor_destroy(output_tensor);
+
+			count++;
+		} else {
+			service_response(socket, OUTOF_SERVICE, NULL);
+		}
+
+		tensor_destroy(input_tensor);
+	}
+	StopEngine(engine);
+	StopEngine(pan_engine);
+
+	syslog(LOG_INFO, "Service shutdown.\n");
+	server_close(socket);
+
+	return RET_OK;
 }
 
 int zoom(int socket, char *input_file)
@@ -49,7 +96,8 @@ int zoom(int socket, char *input_file)
 		send_tensor = tensor_from_image(send_image, 0);
 		check_tensor(send_tensor);
 
-		recv_tensor = OnnxRPC(socket, send_tensor, IMAGE_ZOOM_SERVICE);
+		// Default with Zoom PAN for memory saving
+		recv_tensor = OnnxRPC(socket, send_tensor, IMAGE_ZOOM_SERVICE_WITH_PAN);
 		if (tensor_valid(recv_tensor)) {
 			SaveTensorAsImage(recv_tensor, input_file);
 			tensor_destroy(recv_tensor);

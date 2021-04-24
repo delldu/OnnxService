@@ -281,8 +281,6 @@ TENSOR *do_color(TENSOR *input_tensor)
     	uc[i] = (float)U[i];
     	vc[i] = (float)V[i];
     }
-    // memcpy(uc, (float *)U.data(), n * sizeof(float));
-    // memcpy(vc, (float *)V.data(), n * sizeof(float));
 
     // Convert UV to Fake-ab ...
     output_tensor = tensor_yuv2ab(yuv_tensor);
@@ -307,11 +305,10 @@ int color_optimizer(int socket, int msgcode, TENSOR *input_tensor)
 
     time_reset();
     output_tensor = do_color(input_tensor);
-    check_tensor(output_tensor);
     time_spend((char *)"Image color optimizung ");
 
     msgcode = IMAGE_COLOR_SERVICE;
-    ret = tensor_send(socket, msgcode, output_tensor);
+    ret = service_response(socket, msgcode, output_tensor);
 
     tensor_destroy(output_tensor);
 

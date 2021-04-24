@@ -17,8 +17,6 @@
 
 #include "engine.h"
 
-
-
 // Image clean model input: 1x3x(-1)x(-1), output 1x3x(-1)x(-1)
 int server(char *endpoint, int use_gpu)
 {
@@ -99,11 +97,18 @@ int main(int argc, char **argv)
 		}
 	}
 
+	if (! CudaAvailable() && use_gpu) {
+		syslog_info("Cuda is not aviable, so running on CPU.");
+		use_gpu = 0;
+	}
+
 	if (running_server)
 		return server(endpoint, use_gpu);
 	else if (argc > 1) {
-		if ((socket = client_open(endpoint)) < 0)
+		if ((socket = client_open(endpoint)) < 0) {
+			CheckPoint("---------------");
 			return RET_ERROR;
+		}
 
 		for (i = optind; i < argc; i++)
 			image_clean(socket, argv[i]);

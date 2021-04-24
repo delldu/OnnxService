@@ -629,3 +629,22 @@ void SaveTensorAsImage(TENSOR *tensor, char *filename)
 		image_destroy(image);
 	}
 }
+
+int CudaAvailable()
+{
+	int ok = 0;
+	OrtStatus *status;
+	OrtSessionOptions *session_options;
+
+  	CheckStatus(onnx_runtime_api->CreateSessionOptions(&session_options));
+	status = OrtSessionOptionsAppendExecutionProvider_CUDA(session_options, 0);
+	if (status != NULL) {
+		const char *msg = onnx_runtime_api->GetErrorMessage(status);
+		syslog_error("%s\n", msg);
+		onnx_runtime_api->ReleaseStatus(status);
+	} else {
+		ok = 1;
+	}
+	onnx_runtime_api->ReleaseSessionOptions(session_options);
+	return ok;
+}
