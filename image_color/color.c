@@ -18,11 +18,11 @@
 #include <Eigen/IterativeLinearSolvers>
 #include <Eigen/Sparse>
 
-#define WINDOW_RADIUS	1
-#define WINDOW_WIDTH	(2*WINDOW_RADIUS + 1)
-#define WINDOW_PIXELS	(WINDOW_WIDTH*WINDOW_WIDTH)
 #define IMAGE_COLOR_SERVICE 0x0102
 
+#define WINDOW_RADIUS	1
+
+// Colorization using Optimization
 
 typedef Eigen::Triplet<double> TD;
 
@@ -82,7 +82,6 @@ inline void getWeights(float *Lc, int r,
     for (auto& w : neighborsWeights)
         w /= normalizer;
 }
-
 
 void setupProblem(TENSOR *input_tensor,
 	Eigen::SparseMatrix<double, Eigen::RowMajor>& A,
@@ -168,7 +167,6 @@ TENSOR *tensor_lab2yuv(TENSOR *lab_tensor)
 		yc = tensor_start_chan(yuv_tensor, bat, 0);
 		uc = tensor_start_chan(yuv_tensor, bat, 1);
 		vc = tensor_start_chan(yuv_tensor, bat, 2);
-
 
 		for (i = 0; i < n; i++) {
 			L = Lc[i]; a = ac[i]; b = bc[i];
@@ -295,39 +293,27 @@ TENSOR *do_color(TENSOR *input_tensor)
 	return output_tensor;
 }
 
-int ClassicService(char *endpoint, int use_gpu)
+///////////////////////////////////////////////////////////////////////////
+//
+// input_tensor: Lab + Mask -- mask == 1, is color else gray
+//               L in [-0.5, 0.5], ab in [-1.0, 1.0]
+// Output: 2 Channels, fake ab !!!
+//
+///////////////////////////////////////////////////////////////////////////
+int color_optimizer(int socket, int msgcode, TENSOR *input_tensor)
 {
-	int socket, count, msgcode;
-	TENSOR *input_tensor, *output_tensor;
+    int ret = RET_OK;
+    TENSOR *output_tensor;
 
-	(void)use_gpu;
+    time_reset();
+    output_tensor = do_color(input_tensor);
+    check_tensor(output_tensor);
+    time_spend((char *)"Image color optimizung ");
 
-	if ((socket = server_open(endpoint)) < 0)
-		return RET_ERROR;
+    msgcode = IMAGE_COLOR_SERVICE;
+    ret = tensor_send(socket, msgcode, output_tensor);
 
-	count = 0;
-	for (;;) {
-		syslog_info("Service %d times", count);
+    tensor_destroy(output_tensor);
 
-		input_tensor = service_request(socket, &msgcode);
-		if (!tensor_valid(input_tensor))
-			continue;
-
-		// Real service ...
-		time_reset();
-		output_tensor = do_color(input_tensor);
-		time_spend((char *)"Image coloring");
-
-        service_response(socket, IMAGE_COLOR_SERVICE, output_tensor);
-        tensor_destroy(output_tensor);
-
-		tensor_destroy(input_tensor);
-
-		count++;
-	}
-
-	syslog(LOG_INFO, "Service shutdown.\n");
-	server_close(socket);
-
-	return RET_OK;
+    return ret;
 }

@@ -23,7 +23,7 @@
 int server(char *endpoint, int use_gpu)
 {
 	InitEngineRunningTime(); // Avoid compiler complaint
-	return OnnxService(endpoint, (char *)"image_clean.onnx", IMAGE_CLEAN_SERVICE, use_gpu);
+	return OnnxService(endpoint, (char *)"image_clean.onnx", IMAGE_CLEAN_SERVICE, use_gpu, NULL);
 }
 
 int image_clean(int socket, char *input_file)

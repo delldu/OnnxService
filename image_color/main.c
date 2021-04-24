@@ -17,10 +17,7 @@
 
 #include "engine.h"
 
-
-
-extern int ClassicService(char *endpoint, int use_gpu);
-
+extern int color_optimizer(int socket, int msgcode, TENSOR *input);
 
 // input: rgb,  r, g, b in [0.0, 1.0]
 // output: lab, L in [-.50, 0.5], ab in [-1.0, 1.0]
@@ -185,23 +182,8 @@ TENSOR *blend_fake(TENSOR *source, TENSOR *fake_ab)
 // Image color model input: 1 x 4 x (-1) x (-1)， output: 1 x 2 x (-1) x (-1)
 int color_server(char *endpoint, int use_gpu)
 {
-	char *model;
-
 	InitEngineRunningTime(); // Avoid compiler complaint
-
-	model = getenv("COLOR_MODEL");
-	// image color_model:
-	// input:  lab with mask, l in [-0.5, 0.5], ab in [-1.0, 1.0], mask in [0, 1.0], and 1.0 is valid
-	// output: ab
-	if (! model || strncasecmp(model, "AI", 2) == 0) {
-		syslog_info("Color server is running on AI model ... ");
-
-		return OnnxService(endpoint, (char *)"image_color.onnx", IMAGE_COLOR_SERVICE, use_gpu);
-	}
-
-	// Tradition model
-	syslog_info("Color server is running on tradition model ... ");
-	return ClassicService(endpoint, use_gpu);
+	return OnnxService(endpoint, (char *)"image_color.onnx", IMAGE_COLOR_SERVICE, use_gpu, color_optimizer);
 }
 
 int color_client(int socket, char *input_file)
@@ -281,6 +263,7 @@ int main(int argc, char **argv)
 	}
 
 	if (running_server) {
+
 		return color_server(endpoint, use_gpu);
 	}
 	else if (argc > 1) {

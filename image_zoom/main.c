@@ -33,7 +33,7 @@ int server(char *endpoint, int use_gpu)
 
 	InitEngineRunningTime(); // Avoid compiler complaint
 
-	return OnnxService(endpoint, model, IMAGE_ZOOM_SERVICE, use_gpu);
+	return OnnxService(endpoint, model, IMAGE_ZOOM_SERVICE, use_gpu, NULL);
 }
 
 int zoom(int socket, char *input_file)

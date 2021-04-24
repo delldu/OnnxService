@@ -434,7 +434,7 @@ void DestroyEngine(OrtEngine * engine)
 	free(engine);
 }
 
-int OnnxService(char *endpoint, char *onnx_file, int service_code, int use_gpu)
+int OnnxService(char *endpoint, char *onnx_file, int service_code, int use_gpu, CustomSevice custom_service_function)
 {
 	int socket, count, msgcode;
 	TENSOR *input_tensor, *output_tensor;
@@ -442,6 +442,9 @@ int OnnxService(char *endpoint, char *onnx_file, int service_code, int use_gpu)
 
 	if ((socket = server_open(endpoint)) < 0)
 		return RET_ERROR;
+
+	if (! custom_service_function)
+		custom_service_function = service_response;
 
 	count = 0;
 	for (;;) {
@@ -469,11 +472,11 @@ int OnnxService(char *endpoint, char *onnx_file, int service_code, int use_gpu)
 
 			count++;
 		} else {
-			// Other functions ... , framework preserve !!! 
+			// service_response(socket, servicecode, input_tensor)
+			custom_service_function(socket, OUTOF_SERVICE, NULL);
 		}
 
 		tensor_destroy(input_tensor);
-
 	}
 	StopEngine(engine);
 
@@ -483,7 +486,7 @@ int OnnxService(char *endpoint, char *onnx_file, int service_code, int use_gpu)
 	return RET_OK;
 }
 
-int OnnxServiceFromArray(char *endpoint,  void* model_data, size_t model_data_length, int service_code, int use_gpu)
+int OnnxServiceFromArray(char *endpoint,  void* model_data, size_t model_data_length, int service_code, int use_gpu, CustomSevice custom_service_function)
 {
 	int socket, count, msgcode;
 	TENSOR *input_tensor, *output_tensor;
@@ -491,6 +494,9 @@ int OnnxServiceFromArray(char *endpoint,  void* model_data, size_t model_data_le
 
 	if ((socket = server_open(endpoint)) < 0)
 		return RET_ERROR;
+
+	if (! custom_service_function)
+		custom_service_function = service_response;
 
 	count = 0;
 	for (;;) {
@@ -512,15 +518,15 @@ int OnnxServiceFromArray(char *endpoint,  void* model_data, size_t model_data_le
 			time_reset();
 			output_tensor = TensorForward(engine, input_tensor);
 			time_spend((char *)"Predict");
-
 			service_response(socket, service_code, output_tensor);
 			tensor_destroy(output_tensor);
-
-			tensor_destroy(input_tensor);
 			count++;
 		} else {
-			// Preserve for framework ...
+			// service_response(sokcet, OUT_OF_SERVICE, NULL);
+			custom_service_function(socket, OUTOF_SERVICE, NULL);
 		}
+
+		tensor_destroy(input_tensor);
 	}
 	StopEngine(engine);
 

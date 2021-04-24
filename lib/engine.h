@@ -16,7 +16,6 @@
 #include <nimage/image.h>
 #include <nimage/nnmsg.h>
 
-
 #define IMAGE_CLEAN_SERVICE 0x0101
 #define IMAGE_CLEAN_URL "tcp://127.0.0.1:9101"
 
@@ -68,6 +67,9 @@ typedef struct {
 	std::vector < const char *>output_node_names;
 } OrtEngine;
 
+// typedef int (*CustomSevice)(int socket, int service_code, TENSOR *input_tensor);
+typedef int (*CustomSevice)(int, int, TENSOR *);
+
 #define CheckEngine(e) \
     do { \
             if (! ValidEngine(e)) { \
@@ -84,8 +86,8 @@ TENSOR *TensorForward(OrtEngine * engine, TENSOR * input);
 void DumpEngine(OrtEngine * engine);
 void DestroyEngine(OrtEngine * engine);
 
-int OnnxService(char *endpoint, char *onnx_file, int service_code, int use_gpu);
-int OnnxServiceFromArray(char *endpoint, void* model_data, size_t model_data_length, int service_code, int use_gpu);
+int OnnxService(char *endpoint, char *onnx_file, int service_code, int use_gpu, CustomSevice custom_service_function);
+int OnnxServiceFromArray(char *endpoint, void* model_data, size_t model_data_length, int service_code, int use_gpu, CustomSevice custom_service_function);
 
 TENSOR *OnnxRPC(int socket, TENSOR * input, int reqcode);
 TENSOR *ResizeOnnxRPC(int socket, TENSOR *send_tensor, int reqcode, int multiples);
