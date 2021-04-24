@@ -19,10 +19,6 @@
 #include "engine.h"
 #include "cmaes.h"
 
-#define IMAGE_FACEGAN_SERVICE 0x0108
-// #define IMAGE_FACEGAN_URL "ipc:///tmp/image_facegan.ipc"
-#define IMAGE_FACEGAN_URL "tcp://127.0.0.1:9108"
-
 #define LAMBDA 22		// CMA population size
 #define W_SPACE_DIM 512
 

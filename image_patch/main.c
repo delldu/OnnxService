@@ -17,10 +17,6 @@
 
 #include "engine.h"
 
-#define IMAGE_PATCH_SERVICE 0x0104
-// #define IMAGE_PATCH_URL "ipc:///tmp/image_patch.ipc"
-#define IMAGE_PATCH_URL "tcp://127.0.0.1:9104"
-
 int server(char *endpoint, int use_gpu)
 {
 	// Patch model input: 1 x 4 x (-1) x (-1), 1 x 3 x (-1) x (-1)

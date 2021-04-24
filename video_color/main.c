@@ -17,10 +17,6 @@
 
 #include "engine.h"
 
-#define VIDEO_COLOR_SERVICE 0x0202
-#define VIDEO_REFERENCE_SERVICE 0x0212
-// #define VIDEO_COLOR_URL "ipc:///tmp/video_color.ipc"
-#define VIDEO_COLOR_URL "tcp://127.0.0.1:9202"
 TENSOR *reference_rgb512_tensor = NULL;
 TENSOR *reference_lab512_tensor = NULL;
 TENSOR *last_lab512_tensor = NULL;

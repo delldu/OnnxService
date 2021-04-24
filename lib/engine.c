@@ -356,8 +356,10 @@ TENSOR *TensorForward(OrtEngine * engine, TENSOR * input)
 	dims[1] = input->chan;
 	dims[2] = input->height;
 	dims[3] = input->width;
-	for (i = 0; i < 4; i++)
-		dims[i] = MAX(dims[i], (int)engine->input_node_dims[i]);
+	for (i = 0; i < 4; i++) {
+		if (engine->input_node_dims[i] > 0)
+			dims[i] = (int)engine->input_node_dims[i];
+	}
 	temp_tensor = tensor_reshape(input, dims[0], dims[1], dims[2], dims[3]);
 	CHECK_TENSOR(temp_tensor);
 	input_ortvalue = CreateOrtTensor(temp_tensor, engine->use_gpu);

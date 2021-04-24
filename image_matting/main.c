@@ -17,10 +17,6 @@
 
 #include "engine.h"
 
-#define IMAGE_MATTING_SERVICE 0x0107
-// #define IMAGE_MATTING_URL "ipc:///tmp/image_matting.ipc"
-#define IMAGE_MATTING_URL "tcp://127.0.0.1:9107"
-
 int server(char *endpoint, int use_gpu)
 {
 	// Matting model input: 4x3x(-1)x(-1), output 1x1x(-1)x(-1)

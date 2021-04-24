@@ -17,9 +17,7 @@
 
 #include "engine.h"
 
-#define IMAGE_CLEAN_SERVICE 0x0101
-// #define IMAGE_CLEAN_URL "ipc:///tmp/image_clean.ipc"
-#define IMAGE_CLEAN_URL "tcp://127.0.0.1:9101"
+
 
 // Image clean model input: 1x3x(-1)x(-1), output 1x3x(-1)x(-1)
 int server(char *endpoint, int use_gpu)

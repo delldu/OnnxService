@@ -17,9 +17,6 @@
 
 #include "engine.h"
 
-#define IMAGE_NIMA_SERVICE 0x0103
-// #define IMAGE_NIMA_URL "ipc:///tmp/image_nima.ipc"
-#define IMAGE_NIMA_URL "tcp://127.0.0.1:9103"
 
 int server(char *endpoint, int use_gpu)
 {

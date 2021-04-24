@@ -17,10 +17,6 @@
 
 #include "engine.h"
 
-#define VIDEO_SLOW_SERVICE 0x0203
-// #define VIDEO_SLOW_URL "ipc:///tmp/image_facegan.ipc"
-#define VIDEO_SLOW_URL "tcp://127.0.0.1:9203"
-
 TENSOR *flow_backwarp(TENSOR *image, TENSOR *flow)
 {
 	int i, j, b;

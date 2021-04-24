@@ -16,6 +16,41 @@
 #include <nimage/image.h>
 #include <nimage/nnmsg.h>
 
+
+#define IMAGE_CLEAN_SERVICE 0x0101
+#define IMAGE_CLEAN_URL "tcp://127.0.0.1:9101"
+
+#define IMAGE_COLOR_SERVICE 0x0102
+#define IMAGE_COLOR_URL "tcp://127.0.0.1:9102"
+
+#define IMAGE_NIMA_SERVICE 0x0103
+#define IMAGE_NIMA_URL "tcp://127.0.0.1:9103"
+
+#define IMAGE_PATCH_SERVICE 0x0104
+#define IMAGE_PATCH_URL "tcp://127.0.0.1:9104"
+
+#define IMAGE_ZOOM_SERVICE 0x0105
+#define IMAGE_ZOOM_URL "tcp://127.0.0.1:9105"
+
+#define IMAGE_LIGHT_REQCODE 0x0106
+#define IMAGE_LIGHT_URL "tcp://127.0.0.1:9106"
+
+#define IMAGE_MATTING_SERVICE 0x0107
+#define IMAGE_MATTING_URL "tcp://127.0.0.1:9107"
+
+#define IMAGE_FACEGAN_SERVICE 0x0108
+#define IMAGE_FACEGAN_URL "tcp://127.0.0.1:9108"
+
+#define VIDEO_CLEAN_SERVICE 0x0201
+#define VIDEO_CLEAN_URL "tcp://127.0.0.1:9201"
+
+#define VIDEO_COLOR_SERVICE 0x0202
+#define VIDEO_REFERENCE_SERVICE 0x0212
+#define VIDEO_COLOR_URL "tcp://127.0.0.1:9202"
+
+#define VIDEO_SLOW_SERVICE 0x0203
+#define VIDEO_SLOW_URL "tcp://127.0.0.1:9203"
+
 // ONNX Runtime Engine
 typedef struct {
 	DWORD magic;

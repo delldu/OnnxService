@@ -17,9 +17,7 @@
 
 #include "engine.h"
 
-#define IMAGE_COLOR_SERVICE 0x0102
-// #define IMAGE_COLOR_URL "ipc:///tmp/image_color.ipc"
-#define IMAGE_COLOR_URL "tcp://127.0.0.1:9102"
+
 
 extern int ClassicService(char *endpoint, int use_gpu);
 

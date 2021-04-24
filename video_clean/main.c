@@ -17,9 +17,6 @@
 
 #include "engine.h"
 
-#define VIDEO_CLEAN_SERVICE 0x0201
-// #define VIDEO_CLEAN_URL "ipc:///tmp/video_clean.ipc"
-#define VIDEO_CLEAN_URL "tcp://127.0.0.1:9201"
 
 // Patch model input: 1 x 16 x (-1) x (-1), 1 x 3 x (-1) x (-1)
 int ColorService(char *endpoint, int use_gpu)

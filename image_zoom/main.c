@@ -17,9 +17,6 @@
 
 #include "engine.h"
 
-#define IMAGE_ZOOM_SERVICE 0x0105
-// #define IMAGE_ZOOM_URL "ipc:///tmp/image_zoom.ipc"
-#define IMAGE_ZOOM_URL "tcp://127.0.0.1:9105"
 
 // Patch model input: 1 x 3 x (-1) x (-1), 1 x 3 x (-1) x (-1)
 int server(char *endpoint, int use_gpu)

@@ -18,10 +18,6 @@
 #include "engine.h"
 #include "model.h"
 
-#define IMAGE_LIGHT_REQCODE 0x0106
-// #define IMAGE_LIGHT_URL "ipc:///tmp/image_light.ipc"
-#define IMAGE_LIGHT_URL "tcp://127.0.0.1:9106"
-
 int server(char *endpoint, int use_gpu)
 {
 	// Lighting model input: 1x3x(-1)x(-1), output 1x3x(-1)x(-1)
