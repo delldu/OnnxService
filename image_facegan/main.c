@@ -390,7 +390,7 @@ TENSOR *wcode_search(TENSOR *reference_tensor)
 
 int FaceGanService(char *endpoint, int use_gpu)
 {
-	int socket, lambda;
+	int socket, lambda, msgcode;
 	TENSOR *input_tensor, *output_tensor, *wcode_tensor;
 
 	srand(time(NULL));
@@ -413,10 +413,11 @@ int FaceGanService(char *endpoint, int use_gpu)
 	for (;;) {
 		syslog_info("Service %d times", lambda);
 
-		input_tensor = service_request(socket, IMAGE_FACEGAN_SERVICE);
+		input_tensor = service_request(socket, &msgcode);
 		if (!tensor_valid(input_tensor))
 			continue;
 
+		// msgcode = IMAGE_FACEGAN_SERVICE;
 		// Real service ...
 		time_reset();
 		wcode_tensor = wcode_search(input_tensor); check_tensor(wcode_tensor);

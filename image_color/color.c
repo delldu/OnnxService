@@ -297,7 +297,7 @@ TENSOR *do_color(TENSOR *input_tensor)
 
 int ClassicService(char *endpoint, int use_gpu)
 {
-	int socket, count;
+	int socket, count, msgcode;
 	TENSOR *input_tensor, *output_tensor;
 
 	(void)use_gpu;
@@ -309,7 +309,7 @@ int ClassicService(char *endpoint, int use_gpu)
 	for (;;) {
 		syslog_info("Service %d times", count);
 
-		input_tensor = service_request(socket, IMAGE_COLOR_SERVICE);
+		input_tensor = service_request(socket, &msgcode);
 		if (!tensor_valid(input_tensor))
 			continue;
 

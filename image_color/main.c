@@ -280,8 +280,9 @@ int main(int argc, char **argv)
 		}
 	}
 
-	if (running_server)
+	if (running_server) {
 		return color_server(endpoint, use_gpu);
+	}
 	else if (argc > 1) {
 		if ((socket = client_open(endpoint)) < 0)
 			return RET_ERROR;

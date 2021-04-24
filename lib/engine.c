@@ -436,7 +436,7 @@ void DestroyEngine(OrtEngine * engine)
 
 int OnnxService(char *endpoint, char *onnx_file, int service_code, int use_gpu)
 {
-	int socket, count;
+	int socket, count, msgcode;
 	TENSOR *input_tensor, *output_tensor;
 	OrtEngine *engine = NULL;
 
@@ -451,24 +451,29 @@ int OnnxService(char *endpoint, char *onnx_file, int service_code, int use_gpu)
 		if (! socket_readable(socket, 1000))	// timeout 1 s
 			continue;
 
-		input_tensor = service_request(socket, service_code);
+		input_tensor = service_request(socket, &msgcode);
 		if (! tensor_valid(input_tensor))
 			continue;
 
-		syslog_info("Service %d times", count);
-		StartEngine(engine, onnx_file, use_gpu);
+		if (msgcode == service_code) {
+			syslog_info("Service %d times", count);
+			StartEngine(engine, onnx_file, use_gpu);
 
-		// Real service ...
-		time_reset();
-		output_tensor = TensorForward(engine, input_tensor);
-		time_spend((char *)"Predict");
+			// Real service ...
+			time_reset();
+			output_tensor = TensorForward(engine, input_tensor);
+			time_spend((char *)"Predict");
 
-		service_response(socket, service_code, output_tensor);
-		tensor_destroy(output_tensor);
+			service_response(socket, service_code, output_tensor);
+			tensor_destroy(output_tensor);
+
+			count++;
+		} else {
+			// Other functions ... , framework preserve !!! 
+		}
 
 		tensor_destroy(input_tensor);
 
-		count++;
 	}
 	StopEngine(engine);
 
@@ -480,7 +485,7 @@ int OnnxService(char *endpoint, char *onnx_file, int service_code, int use_gpu)
 
 int OnnxServiceFromArray(char *endpoint,  void* model_data, size_t model_data_length, int service_code, int use_gpu)
 {
-	int socket, count;
+	int socket, count, msgcode;
 	TENSOR *input_tensor, *output_tensor;
 	OrtEngine *engine;
 
@@ -489,31 +494,33 @@ int OnnxServiceFromArray(char *endpoint,  void* model_data, size_t model_data_le
 
 	count = 0;
 	for (;;) {
-		syslog_info("Service %d times", count);
-
 		if (EngineIsIdle())
 			StopEngine(engine);
 
 		if (! socket_readable(socket, 1000))	// timeout 1 s
 			continue;
 
-		input_tensor = service_request(socket, service_code);
+		input_tensor = service_request(socket, &msgcode);
 		if (! tensor_valid(input_tensor))
 			continue;
 
-		StartEngineFromArray(engine, model_data, model_data_length, use_gpu);
+		if (msgcode == service_code) {
+			syslog_info("Service %d times", count);
+			StartEngineFromArray(engine, model_data, model_data_length, use_gpu);
 
-		// Real service ...
-		time_reset();
-		output_tensor = TensorForward(engine, input_tensor);
-		time_spend((char *)"Predict");
+			// Real service ...
+			time_reset();
+			output_tensor = TensorForward(engine, input_tensor);
+			time_spend((char *)"Predict");
 
-		service_response(socket, service_code, output_tensor);
-		tensor_destroy(output_tensor);
+			service_response(socket, service_code, output_tensor);
+			tensor_destroy(output_tensor);
 
-		tensor_destroy(input_tensor);
-
-		count++;
+			tensor_destroy(input_tensor);
+			count++;
+		} else {
+			// Preserve for framework ...
+		}
 	}
 	StopEngine(engine);
 

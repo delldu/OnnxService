@@ -21,7 +21,7 @@
 // Patch model input: 1 x 16 x (-1) x (-1), 1 x 3 x (-1) x (-1)
 int ColorService(char *endpoint, int use_gpu)
 {
-	int socket, count;
+	int socket, count, msgcode;
 	TENSOR *input_tensor, *output_tensor;
 	OrtEngine *clean_engine = NULL;
 
@@ -38,24 +38,28 @@ int ColorService(char *endpoint, int use_gpu)
 		if (! socket_readable(socket, 1000))	// timeout 1 s
 			continue;
 
-		input_tensor = service_request(socket, VIDEO_CLEAN_SERVICE);
+		input_tensor = service_request(socket, &msgcode);
 		if (!tensor_valid(input_tensor))
 			continue;
 
-		syslog_info("Service %d times", count);
-		StartEngine(clean_engine, (char *)"video_clean.onnx", use_gpu);
+		if (msgcode == VIDEO_CLEAN_SERVICE) {
+			syslog_info("Service %d times", count);
+			StartEngine(clean_engine, (char *)"video_clean.onnx", use_gpu);
 
-		// Real service ...
-		time_reset();
-		output_tensor = TensorForward(clean_engine, input_tensor);
-		time_spend((char *)"Video cleaning");
+			// Real service ...
+			time_reset();
+			output_tensor = TensorForward(clean_engine, input_tensor);
+			time_spend((char *)"Video cleaning");
 
-		service_response(socket, VIDEO_CLEAN_SERVICE, output_tensor);
-		tensor_destroy(output_tensor);
+			service_response(socket, VIDEO_CLEAN_SERVICE, output_tensor);
+			tensor_destroy(output_tensor);
 
-		tensor_destroy(input_tensor);
+			tensor_destroy(input_tensor);
 
-		count++;
+			count++;
+		} else {
+			// ...
+		}
 	}
 	StopEngine(clean_engine);
 

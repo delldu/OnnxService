@@ -232,7 +232,7 @@ TENSOR *slow_do(OrtEngine *fc, OrtEngine *at, TENSOR *input_tensor, int scale)
 
 int SlowService(char *endpoint, int use_gpu)
 {
-	int socket, count;
+	int socket, count, msgcode;
 	TENSOR *input_tensor, *output_tensor;
 	OrtEngine *fc_engine = NULL;
 	OrtEngine *at_engine = NULL;
@@ -252,26 +252,30 @@ int SlowService(char *endpoint, int use_gpu)
 		if (! socket_readable(socket, 1000))	// timeout 1 s
 			continue;
 
-		input_tensor = service_request(socket, VIDEO_SLOW_SERVICE);
+		input_tensor = service_request(socket, &msgcode);
 		if (!tensor_valid(input_tensor))
 			continue;
 
-		syslog_info("Service %d times", count);
+		if (msgcode == VIDEO_SLOW_SERVICE) {
+			syslog_info("Service %d times", count);
 
-		StartEngine(fc_engine, (char *)"video_slow_fc.onnx", use_gpu);
-		StartEngine(at_engine, (char *)"video_slow_at.onnx", use_gpu);
+			StartEngine(fc_engine, (char *)"video_slow_fc.onnx", use_gpu);
+			StartEngine(at_engine, (char *)"video_slow_at.onnx", use_gpu);
 
-		// Real service ...
-		time_reset();
-		output_tensor = slow_do(fc_engine, at_engine, input_tensor, 4 /*scale */);
-		time_spend((char *)"Video slowing");
+			// Real service ...
+			time_reset();
+			output_tensor = slow_do(fc_engine, at_engine, input_tensor, 4 /*scale */);
+			time_spend((char *)"Video slowing");
 
-		service_response(socket, VIDEO_SLOW_SERVICE, output_tensor);
-		tensor_destroy(output_tensor);
+			service_response(socket, VIDEO_SLOW_SERVICE, output_tensor);
+			tensor_destroy(output_tensor);
 
-		tensor_destroy(input_tensor);
+			tensor_destroy(input_tensor);
 
-		count++;
+			count++;
+		} else {
+			// ...
+		}
 	}
 	StopEngine(fc_engine);
 	StopEngine(at_engine);
