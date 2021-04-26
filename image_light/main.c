@@ -22,7 +22,7 @@ int server(char *endpoint, int use_gpu)
 {
 	// Lighting model input: 1x3x(-1)x(-1), output 1x3x(-1)x(-1)
 	InitEngineRunningTime(); // Avoid compiler complaint
-	return OnnxServiceFromArray(endpoint, image_light_onnx, image_light_onnx_len, IMAGE_LIGHT_REQCODE, use_gpu, NULL);
+	return OnnxServiceFromArray(endpoint, image_light_onnx, image_light_onnx_len, IMAGE_LIGHT_SERVICE, use_gpu, NULL);
 }
 
 int light(int socket, char *input_file)
@@ -38,7 +38,7 @@ int light(int socket, char *input_file)
 		send_tensor = tensor_from_image(send_image, 0);
 		check_tensor(send_tensor);
 
-		recv_tensor = OnnxRPC(socket, send_tensor, IMAGE_LIGHT_REQCODE);
+		recv_tensor = OnnxRPC(socket, send_tensor, IMAGE_LIGHT_SERVICE);
 		if (tensor_valid(recv_tensor)) {
 			SaveTensorAsImage(recv_tensor, input_file);
 			tensor_destroy(recv_tensor);
