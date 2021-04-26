@@ -7,6 +7,7 @@
 #************************************************************************************/
 #
 INSTALL_DIR=/usr/local
+ONNXMODEL_INSTALL_DIR=/opt/onnxservice
 ONNXRUNTIME_INSTALL_DIR=/opt/onnxruntime
 
 XSUBDIRS :=  \

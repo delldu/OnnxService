@@ -223,7 +223,7 @@ OrtEngine *CreateEngine(char *model_path, int use_gpu)
 		return NULL;
 	}
 	t->magic = ENGINE_MAGIC;
-	t->model_path = model_path;
+	t->model_path = FindModel(model_path);
 	t->use_gpu = use_gpu;
 
 	// Building ...
@@ -263,7 +263,7 @@ OrtEngine *CreateEngine(char *model_path, int use_gpu)
 OrtEngine *CreateEngineFromArray(void* model_data, size_t model_data_length, int use_gpu)
 {
 	OrtEngine *t;
-	const char *model_path = "memory";
+	char *model_path = strdup("memory");
 
 	syslog_info("Creating ONNX Runtime Engine for model size %s ...", model_path);
 
@@ -423,6 +423,9 @@ void DestroyEngine(OrtEngine * engine)
 	if (!ValidEngine(engine))
 		return;
 
+	if (engine->model_path)
+		free(engine->model_path);
+
 	// Release ...
 	engine->input_node_names.clear();
 	engine->output_node_names.clear();
@@ -536,8 +539,6 @@ int OnnxServiceFromArray(char *endpoint,  void* model_data, size_t model_data_le
 	return RET_OK;
 }
 
-
-
 TENSOR *OnnxRPC(int socket, TENSOR * input, int reqcode)
 {
 	int rescode  = -1;
@@ -605,7 +606,6 @@ TENSOR *ZeropadOnnxRPC(int socket, TENSOR *send_tensor, int reqcode, int multipl
 	return recv_tensor;
 }
 
-
 void SaveOutputImage(IMAGE *image, char *filename)
 {
 	char output_filename[256], *p;
@@ -640,11 +640,31 @@ int CudaAvailable()
 	status = OrtSessionOptionsAppendExecutionProvider_CUDA(session_options, 0);
 	if (status != NULL) {
 		const char *msg = onnx_runtime_api->GetErrorMessage(status);
-		syslog_error("%s\n", msg);
+		syslog_error("%s", msg);
 		onnx_runtime_api->ReleaseStatus(status);
 	} else {
 		ok = 1;
 	}
 	onnx_runtime_api->ReleaseSessionOptions(session_options);
 	return ok;
+}
+
+char *FindModel(char *modelname)
+{
+	char filename[256];
+
+	snprintf(filename, sizeof(filename), "%s", modelname);
+	if(access(filename, F_OK) == 0) {
+		CheckPoint("Found Model: %s", filename);
+		return strdup(filename);
+	}
+
+	snprintf(filename, sizeof(filename), "%s/%s", ONNXMODEL_INSTALL_DIR, modelname);
+	if(access(filename, F_OK) == 0) {
+		CheckPoint("Found Model: %s", filename);
+		return strdup(filename);
+	}
+
+	syslog_error("Model %s NOT Found !", modelname);
+	return NULL;
 }

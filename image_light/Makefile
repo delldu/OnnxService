@@ -8,6 +8,7 @@
 #
 INSTALL_DIR := $(shell grep -w INSTALL_DIR ../Makefile | cut -d '=' -f 2)
 ONNXRUNTIME_INSTALL_DIR := $(shell grep -w ONNXRUNTIME_INSTALL_DIR ../Makefile | cut -d '=' -f 2)
+ONNXMODEL_INSTALL_DIR := $(shell grep -w ONNXMODEL_INSTALL_DIR ../Makefile | cut -d '=' -f 2)
 
 TARGET := image_light
 
@@ -44,7 +45,8 @@ install:
 	install -m 755 ${TARGET} ${INSTALL_DIR}/bin
 	cp image_light.service /lib/systemd/system/
 	systemctl daemon-reload
-
+	mkdir -p $(ONNXMODEL_INSTALL_DIR)
+	cp *.onnx $(ONNXMODEL_INSTALL_DIR)
 
 #****************************************************************************
 # common rules

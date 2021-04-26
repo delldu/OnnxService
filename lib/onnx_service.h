@@ -14,6 +14,21 @@
 #define SERVICE_ARGUMENT(msgcode) ((msgcode) & 0xffff)
 #define DEFINE_SERVICE(service_code, service_arg) (((service_code) & 0xffff0000) | ((service_arg) & 0xffff))
 
+/****************************************************************************************
+***
+***  DO NOT USE major service code 0xF for it define in NImage project for system service ...
+*** 	For reference the following define ins nnmsg.h ...
+***
+*** 	#define HELLO_REQUEST_MESSAGE  0xFF010000
+***     #define HELLO_RESPONSE_MESSAGE 0xFF020000
+***     #define ERROR_TIMEOUT_MESSAGE 0xFF030000
+***     #define OUTOF_SERVICE 0xFF040000
+***     #define INVALID_SERVICE_MESSAGE 0xFF050000
+***
+****************************************************************************************/
+
+// Service NO from 1 to 12 at present
+
 #define IMAGE_CLEAN_SERVICE DEFINE_SERVICE_CODE(1,1)
 #define IMAGE_CLEAN_SERVICE_WITH_GUIDED_FILTER DEFINE_SERVICE_CODE(1,2)
 #define IMAGE_CLEAN_SERVICE_WITH_BM3D DEFINE_SERVICE_CODE(1,3)

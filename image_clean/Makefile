@@ -8,6 +8,7 @@
 #
 INSTALL_DIR := $(shell grep -w INSTALL_DIR ../Makefile | cut -d '=' -f 2)
 ONNXRUNTIME_INSTALL_DIR := $(shell grep -w ONNXRUNTIME_INSTALL_DIR ../Makefile | cut -d '=' -f 2)
+ONNXMODEL_INSTALL_DIR := $(shell grep -w ONNXMODEL_INSTALL_DIR ../Makefile | cut -d '=' -f 2)
 
 TARGET := image_clean
 
@@ -21,6 +22,7 @@ LIBS	:= -L../lib -lonnxeng -L$(ONNXRUNTIME_INSTALL_DIR)/lib -lonnxruntime \
 		-Wl,-rpath=$(ONNXRUNTIME_INSTALL_DIR)/lib
 
 DEFINES := -D_GLIBCXX_USE_CXX11_ABI=1 -std=c++14 -std=gnu++14
+
 
 CXXFLAGS := -O2 -fPIC -Wall -Wextra
 LDFLAGS := -fPIC
@@ -44,7 +46,8 @@ install:
 	install -m 755 ${TARGET} ${INSTALL_DIR}/bin
 	cp image_clean.service /lib/systemd/system/
 	systemctl daemon-reload
-
+	mkdir -p $(ONNXMODEL_INSTALL_DIR)
+	cp *.onnx $(ONNXMODEL_INSTALL_DIR)
 
 #****************************************************************************
 # common rules

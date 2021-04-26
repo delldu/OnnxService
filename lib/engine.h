@@ -21,7 +21,7 @@
 // ONNX Runtime Engine
 typedef struct {
 	DWORD magic;
-	const char *model_path;
+	char *model_path;
 	int use_gpu;
 	OrtEnv *env;
 	OrtSession *session;
@@ -94,5 +94,7 @@ do { \
 
 #define InitEngineRunningTime() do { engine_last_running_time = 0; } while(0)
 #define EngineIsIdle() (time_now() - engine_last_running_time > ENGINE_IDLE_TIME)
+
+char *FindModel(char *modelname);
 
 #endif // _ENGINE_H

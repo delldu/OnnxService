@@ -8,6 +8,7 @@
 #
 INSTALL_DIR := $(shell grep -w INSTALL_DIR ../Makefile | cut -d '=' -f 2)
 ONNXRUNTIME_INSTALL_DIR := $(shell grep -w ONNXRUNTIME_INSTALL_DIR ../Makefile | cut -d '=' -f 2)
+ONNXMODEL_INSTALL_DIR := $(shell grep -w ONNXMODEL_INSTALL_DIR ../Makefile | cut -d '=' -f 2)
 
 TARGET := video_slow
 

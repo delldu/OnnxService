@@ -8,6 +8,7 @@
 #
 INSTALL_DIR := $(shell grep -w INSTALL_DIR ../Makefile | cut -d '=' -f 2)
 ONNXRUNTIME_INSTALL_DIR := $(shell grep -w ONNXRUNTIME_INSTALL_DIR ../Makefile | cut -d '=' -f 2)
+ONNXMODEL_INSTALL_DIR := $(shell grep -w ONNXMODEL_INSTALL_DIR ../Makefile | cut -d '=' -f 2)
 
 LIB_NAME := libonnxeng
 
@@ -16,7 +17,8 @@ INCS	:= -I$(ONNXRUNTIME_INSTALL_DIR)/include $(shell nimagetool --cflags)
 SOURCE :=  \
 	engine.c
 
-DEFINES := -D_GLIBCXX_USE_CXX11_ABI=1 -std=c++14 -std=gnu++14 
+DEFINES := -D_GLIBCXX_USE_CXX11_ABI=1 -std=c++14 -std=gnu++14 \
+		-DONNXMODEL_INSTALL_DIR="\"$(ONNXMODEL_INSTALL_DIR)\""
 
 CXXFLAGS := -fPIC -Wall -Wextra
 LDFLAGS := -fPIC -O3
