@@ -6,8 +6,8 @@
 #***
 #************************************************************************************/
 #
-INSTALL_DIR := $(shell grep INSTALL_DIR ../Makefile | cut -d '=' -f 2)
-ONNXRUNTIME_INSTALL_DIR := $(shell grep ONNXRUNTIME_INSTALL_DIR ../Makefile | cut -d '=' -f 2)
+INSTALL_DIR := $(shell grep -w INSTALL_DIR ../Makefile | cut -d '=' -f 2)
+ONNXRUNTIME_INSTALL_DIR := $(shell grep -w ONNXRUNTIME_INSTALL_DIR ../Makefile | cut -d '=' -f 2)
 
 TARGET := image_clean
 
