@@ -1,10 +1,9 @@
-# README
+## README
 
-This project is video clean application with onnx.
+### Video Clean
+```
+Input: 1 x 16 x (-1) x (-1)
+output: 1 x 3 x (-1) x (-1)
 
-## 1. Set Running Environment
-
-export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/opt/onnxruntime/lib
-
-## 2. Thanks
+````
 

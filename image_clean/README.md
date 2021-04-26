@@ -1,1 +1,8 @@
-export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/opt/onnxruntime/lib
+##  README
+
+### Image Clean I/O Format
+```
+Input: 1 x 3 x -1 x -1
+Output: 1 x 3 x -1 x -1
+```
+

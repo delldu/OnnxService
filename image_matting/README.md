@@ -1,8 +1,11 @@
-# README
+## README
 
-## Running environment
+### Matting I/O Format
+```
+Input: 1 x 3 x (-1) x (-1)
+output: 1 x 1 x (-1) x (-1)
 
-`export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/opt/onnxruntime/lib`
+````
 
 ## Reference
 

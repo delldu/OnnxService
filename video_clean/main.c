@@ -18,8 +18,8 @@
 #include "engine.h"
 
 
-// Patch model input: 1 x 16 x (-1) x (-1), 1 x 3 x (-1) x (-1)
-int ColorService(char *endpoint, int use_gpu)
+// Video model input: 1 x 16 x (-1) x (-1), 1 x 3 x (-1) x (-1)
+int VideoCleanService(char *endpoint, int use_gpu)
 {
 	int socket, count, msgcode;
 	TENSOR *input_tensor, *output_tensor;
@@ -63,7 +63,7 @@ int ColorService(char *endpoint, int use_gpu)
 	}
 	StopEngine(clean_engine);
 
-	syslog(LOG_INFO, "Service shutdown.\n");
+	syslog(LOG_INFO, "Service shutdown.");
 	server_close(socket);
 
 	return RET_OK;
@@ -71,7 +71,7 @@ int ColorService(char *endpoint, int use_gpu)
 
 int server(char *endpoint, int use_gpu)
 {
-	return ColorService(endpoint, use_gpu);
+	return VideoCleanService(endpoint, use_gpu);
 }
 
 TENSOR *clean_load(int n, char *filenames[])
