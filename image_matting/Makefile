@@ -41,9 +41,9 @@ ${TARGET}: ${OBJECT}
 	${CXX} ${LDFLAGS} -o ${TARGET} ${OBJECT} ${LIBS}
 
 install:
-	sudo install -m 755 ${TARGET} ${INSTALL_DIR}/bin
-	sudo cp image_matting.service /lib/systemd/system/
-	sudo systemctl daemon-reload
+	install -m 755 ${TARGET} ${INSTALL_DIR}/bin
+	cp image_matting.service /lib/systemd/system/
+	systemctl daemon-reload
 
 
 #****************************************************************************

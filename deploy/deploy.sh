@@ -28,7 +28,7 @@ before()
 docker()
 {
 	echo "Building deployment docker ..."
-	sudo docker build -t "onnxservice:runner" .
+	docker build -t "onnxservice:runner" .
 }
 
 after()

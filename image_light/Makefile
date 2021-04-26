@@ -6,8 +6,8 @@
 #***
 #************************************************************************************/
 #
-INSTALL_DIR := /usr/local
-ONNXRUNTIME_INSTALL_DIR := /opt/onnxruntime
+INSTALL_DIR := $(shell grep INSTALL_DIR ../Makefile | cut -d '=' -f 2)
+ONNXRUNTIME_INSTALL_DIR := $(shell grep ONNXRUNTIME_INSTALL_DIR ../Makefile | cut -d '=' -f 2)
 
 TARGET := image_light
 
@@ -41,9 +41,9 @@ ${TARGET}: ${OBJECT}
 	${CXX} ${LDFLAGS} -o ${TARGET} ${OBJECT} ${LIBS}
 
 install:
-	sudo install -m 755 ${TARGET} ${INSTALL_DIR}/bin
-	sudo cp image_light.service /lib/systemd/system/
-	sudo systemctl daemon-reload
+	install -m 755 ${TARGET} ${INSTALL_DIR}/bin
+	cp image_light.service /lib/systemd/system/
+	systemctl daemon-reload
 
 
 #****************************************************************************

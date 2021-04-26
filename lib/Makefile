@@ -6,7 +6,8 @@
 #***
 #************************************************************************************/
 #
-ONNXRUNTIME_INSTALL_DIR := /opt/onnxruntime
+INSTALL_DIR := $(shell grep INSTALL_DIR ../Makefile | cut -d '=' -f 2)
+ONNXRUNTIME_INSTALL_DIR := $(shell grep ONNXRUNTIME_INSTALL_DIR ../Makefile | cut -d '=' -f 2)
 
 LIB_NAME := libonnxeng
 
@@ -48,6 +49,9 @@ depend:
 %.o : %.c
 	${CXX} ${CXXFLAGS} ${INCS} -c $< -o $@
 
+
+install:
+	cp onnx_service.h ${INSTALL_DIR}/include
 
 clean:
 	rm -rf *.a *.so *.o $(OBJECTS)
