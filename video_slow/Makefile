@@ -45,6 +45,8 @@ install:
 	install -m 755 ${TARGET} ${INSTALL_DIR}/bin
 	cp video_slow.service /lib/systemd/system/
 	systemctl daemon-reload
+	mkdir -p $(ONNXMODEL_INSTALL_DIR)
+	cp *.onnx $(ONNXMODEL_INSTALL_DIR)
 
 
 #****************************************************************************

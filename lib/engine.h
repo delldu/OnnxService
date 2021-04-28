@@ -16,7 +16,7 @@
 #include <nimage/image.h>
 #include <nimage/nnmsg.h>
 
-#include "onnx_service.h"
+#include "vision_service.h"
 
 // ONNX Runtime Engine
 typedef struct {

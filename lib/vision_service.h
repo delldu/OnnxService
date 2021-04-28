@@ -27,7 +27,7 @@
 ***
 ****************************************************************************************/
 
-// Service NO from 1 to 12 at present
+// Service NO from 1 to 13 at present
 
 #define IMAGE_CLEAN_SERVICE DEFINE_SERVICE_CODE(1,1)
 #define IMAGE_CLEAN_SERVICE_WITH_GUIDED_FILTER DEFINE_SERVICE_CODE(1,2)
@@ -69,5 +69,7 @@
 #define VIDEO_ZOOM_SERVICE DEFINE_SERVICE_CODE(12,1)
 #define VIDEO_ZOOM_URL "tcp://127.0.0.1:9012"
 
+#define VIDEO_RIFE_SERVICE DEFINE_SERVICE_CODE(13,1)
+#define VIDEO_RIFE_URL "tcp://127.0.0.1:9013"
 
 #endif // _ONNX_SERVICE_H

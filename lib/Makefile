@@ -53,7 +53,7 @@ depend:
 
 
 install:
-	cp onnx_service.h ${INSTALL_DIR}/include
+	cp vision_service.h ${INSTALL_DIR}/include
 
 clean:
 	rm -rf *.a *.so *.o $(OBJECTS)
