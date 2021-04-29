@@ -15,7 +15,8 @@ LIB_NAME := libonnxeng
 INCS	:= -I$(ONNXRUNTIME_INSTALL_DIR)/include $(shell nimagetool --cflags)
 
 SOURCE :=  \
-	engine.c
+	engine.c \
+	grid_sample.c
 
 DEFINES := -D_GLIBCXX_USE_CXX11_ABI=1 -std=c++14 -std=gnu++14 \
 		-DONNXMODEL_INSTALL_DIR="\"$(ONNXMODEL_INSTALL_DIR)\""

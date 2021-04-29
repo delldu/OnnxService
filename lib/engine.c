@@ -10,19 +10,22 @@
 // https://github.com/microsoft/onnxruntime/edit/master/csharp/test/Microsoft.ML.OnnxRuntime.EndToEndTests.Capi/C_Api_Sample.cpp
 
 #include <assert.h>
-#include "engine.h"
 
 // For mkdir
 #include <sys/types.h>
-#include <sys/stat.h> 
+#include <sys/stat.h>
 
 // opt/onnxruntime-linux-x64-gpu-1.6.0/include/cuda_provider_factory.h
 #include <cuda_provider_factory.h>
+
+#include "engine.h"
+#include "grid_sample.h"
 
 // ONNX Runtime Engine
 #define MAKE_FOURCC(a,b,c,d) (((DWORD)(a) << 24) | ((DWORD)(b) << 16) | ((DWORD)(c) << 8) | ((DWORD)(d) << 0))
 #define ENGINE_MAGIC MAKE_FOURCC('O', 'N', 'R', 'T')
 
+char *FindModel(char *modelname);
 
 extern void CheckStatus(OrtStatus * status);
 extern OrtValue *CreateOrtTensor(TENSOR * tensor, int gpu);
@@ -33,6 +36,27 @@ extern float *OrtTensorValues(OrtValue * tensor);
 extern void DestroyOrtTensor(OrtValue * tensor);
 
 const OrtApi *onnx_runtime_api = OrtGetApiBase()->GetApi(ORT_API_VERSION);
+const char *c_CustomOpDomain = "onnx";
+GridSampleOp c_GridSampleOp;
+
+int RegisterGridSampler(OrtSessionOptions *options)
+{
+	OrtCustomOpDomain *domain = nullptr;
+
+	if (onnx_runtime_api->CreateCustomOpDomain(c_CustomOpDomain, &domain)) {
+		syslog_error("CreateCustomOpDomain");
+		return RET_ERROR;
+	}
+
+	if (onnx_runtime_api->CustomOpDomain_Add(domain, &c_GridSampleOp)) {
+		syslog_error("CustomOpDomain_Add: GridSampleOp");
+		return RET_ERROR;
+	}
+
+	return onnx_runtime_api->AddCustomOpDomain(options, domain)? RET_ERROR : RET_OK;
+}
+
+
 
 void InitInputNodes(OrtEngine * t)
 {
@@ -69,9 +93,9 @@ void InitInputNodes(OrtEngine * t)
 
 		for (size_t j = 0; j < num_dims; j++) {
 			if (j < num_dims - 1)
-				printf("%d x ", (int)t->input_node_dims[j]);
+				printf("%d x ", (int) t->input_node_dims[j]);
 			else
-				printf("%d\n", (int)t->input_node_dims[j]);
+				printf("%d\n", (int) t->input_node_dims[j]);
 		}
 
 		onnx_runtime_api->ReleaseTypeInfo(typeinfo);
@@ -113,9 +137,9 @@ void InitOutputNodes(OrtEngine * t)
 		CheckStatus(onnx_runtime_api->GetDimensions(tensor_info, (int64_t *) t->output_node_dims, num_dims));
 		for (size_t j = 0; j < num_dims && j < sizeof(t->output_node_dims); j++) {
 			if (j < num_dims - 1)
-				printf("%d x ", (int)t->output_node_dims[j]);
+				printf("%d x ", (int) t->output_node_dims[j]);
 			else
-				printf("%d\n", (int)t->output_node_dims[j]);
+				printf("%d\n", (int) t->output_node_dims[j]);
 		}
 
 		onnx_runtime_api->ReleaseTypeInfo(typeinfo);
@@ -144,7 +168,7 @@ int ValidOrtTensor(OrtValue * tensor)
 	return is_tensor;
 }
 
-OrtValue* CreateOrtTensor(TENSOR * tensor, int gpu)
+OrtValue *CreateOrtTensor(TENSOR * tensor, int gpu)
 {
 	size_t size, n_dims;
 	int64_t dims[4];
@@ -190,7 +214,7 @@ size_t OrtTensorDimensions(OrtValue * tensor, int64_t * dims)
 		exit(-1);
 	}
 	if (dim_count > 4)
-		dim_count = 4;	// Truncate for BxCxHxW format
+		dim_count = 4;			// Truncate for BxCxHxW format
 
 	CheckStatus(onnx_runtime_api->GetDimensions(shape_info, dims, dim_count));
 
@@ -234,19 +258,23 @@ OrtEngine *CreateEngine(char *model_path, int use_gpu)
 	CheckStatus(onnx_runtime_api->CreateSessionOptions(&(t->session_options)));
 	// CheckStatus(onnx_runtime_api->SetIntraOpNumThreads(t->session_options, 0));  // 0 -- for default 
 
+	// RegisterGridSampler, support onnx::grid_sampler
+	RegisterGridSampler(t->session_options);
+
 	// Sets graph optimization level
 	CheckStatus(onnx_runtime_api->SetSessionGraphOptimizationLevel(t->session_options, ORT_ENABLE_ALL));
 	// ORT_ENABLE_BASIC, ORT_ENABLE_EXTENDED, ORT_ENABLE_ALL
 
 	// Optionally add more execution providers via session_options
 	// E.g. for CUDA include cuda_provider_factory.h and uncomment the following line:
-	
+
 	if (use_gpu)
 		CheckStatus(OrtSessionOptionsAppendExecutionProvider_CUDA(t->session_options, 0));
 
 	// CreateSessionFromArray prototype
-	// ORT_API2_STATUS(CreateSessionFromArray, _In_ const OrtEnv* env, _In_ const void* model_data, size_t model_data_length,
-	//                  _In_ const OrtSessionOptions* options, _Outptr_ OrtSession** out);	
+	// ORT_API2_STATUS(CreateSessionFromArray, _In_ const OrtEnv* env, 
+	//      _In_ const void* model_data, size_t model_data_length,
+	//      _In_ const OrtSessionOptions* options, _Outptr_ OrtSession** out);  
 	CheckStatus(onnx_runtime_api->CreateSession(t->env, model_path, t->session_options, &(t->session)));
 
 	// Setup input_node_names;
@@ -260,7 +288,7 @@ OrtEngine *CreateEngine(char *model_path, int use_gpu)
 	return t;
 }
 
-OrtEngine *CreateEngineFromArray(void* model_data, size_t model_data_length, int use_gpu)
+OrtEngine *CreateEngineFromArray(void *model_data, size_t model_data_length, int use_gpu)
 {
 	OrtEngine *t;
 	char *model_path = strdup("memory");
@@ -284,22 +312,25 @@ OrtEngine *CreateEngineFromArray(void* model_data, size_t model_data_length, int
 	CheckStatus(onnx_runtime_api->CreateSessionOptions(&(t->session_options)));
 	// CheckStatus(onnx_runtime_api->SetIntraOpNumThreads(t->session_options, 0));  // 0 -- for default 
 
+	// RegisterGridSampler, support onnx::grid_sampler
+	RegisterGridSampler(t->session_options);
+
 	// Sets graph optimization level
 	CheckStatus(onnx_runtime_api->SetSessionGraphOptimizationLevel(t->session_options, ORT_ENABLE_ALL));
 	// ORT_ENABLE_BASIC, ORT_ENABLE_EXTENDED, ORT_ENABLE_ALL
 
 	// Optionally add more execution providers via session_options
 	// E.g. for CUDA include cuda_provider_factory.h and uncomment the following line:
-	
+
 	if (use_gpu)
 		CheckStatus(OrtSessionOptionsAppendExecutionProvider_CUDA(t->session_options, 0));
 
 	// CreateSessionFromArray prototype
 	// ORT_API2_STATUS(CreateSessionFromArray, _In_ const OrtEnv* env, 
-	// 		_In_ const void* model_data, size_t model_data_length,
-	//		_In_ const OrtSessionOptions* options, _Outptr_ OrtSession** out);	
-	CheckStatus(onnx_runtime_api->CreateSessionFromArray(t->env, model_data, model_data_length, 
-		t->session_options, &(t->session)));
+	//      _In_ const void* model_data, size_t model_data_length,
+	//      _In_ const OrtSessionOptions* options, _Outptr_ OrtSession** out);  
+	CheckStatus(onnx_runtime_api->CreateSessionFromArray(t->env, model_data, model_data_length,
+														 t->session_options, &(t->session)));
 
 	// Setup input_node_names;
 	InitInputNodes(t);
@@ -358,7 +389,7 @@ TENSOR *TensorForward(OrtEngine * engine, TENSOR * input)
 	dims[3] = input->width;
 	for (i = 0; i < 4; i++) {
 		if (engine->input_node_dims[i] > 0)
-			dims[i] = (int)engine->input_node_dims[i];
+			dims[i] = (int) engine->input_node_dims[i];
 	}
 	temp_tensor = tensor_reshape(input, dims[0], dims[1], dims[2], dims[3]);
 	CHECK_TENSOR(temp_tensor);
@@ -399,19 +430,16 @@ void DumpEngine(OrtEngine * engine)
 		syslog_info("Engine:");
 
 		snprintf(buf, sizeof(buf) - 1, "    Input %s: %d x %d %d x %d",
-			engine->input_node_names[0],
-			(int)engine->input_node_dims[0],
-			(int)engine->input_node_dims[1],
-			(int)engine->input_node_dims[2],
-			(int)engine->input_node_dims[3]);
-		syslog_info("%s",buf);
+				 engine->input_node_names[0],
+				 (int) engine->input_node_dims[0],
+				 (int) engine->input_node_dims[1], (int) engine->input_node_dims[2], (int) engine->input_node_dims[3]);
+		syslog_info("%s", buf);
 
 		snprintf(buf, sizeof(buf) - 1, "    Output %s: %d x %d %d x %d",
-			engine->output_node_names[0],
-			(int)engine->output_node_dims[0],
-			(int)engine->output_node_dims[1],
-			(int)engine->output_node_dims[2],
-			(int)engine->output_node_dims[3]);
+				 engine->output_node_names[0],
+				 (int) engine->output_node_dims[0],
+				 (int) engine->output_node_dims[1],
+				 (int) engine->output_node_dims[2], (int) engine->output_node_dims[3]);
 		syslog_info("%s", buf);
 	} else {
 		syslog_info("Engine == NULL");
@@ -446,7 +474,7 @@ int OnnxService(char *endpoint, char *onnx_file, int service_code, int use_gpu, 
 	if ((socket = server_open(endpoint)) < 0)
 		return RET_ERROR;
 
-	if (! custom_service_function)
+	if (!custom_service_function)
 		custom_service_function = service_response;
 
 	count = 0;
@@ -454,11 +482,11 @@ int OnnxService(char *endpoint, char *onnx_file, int service_code, int use_gpu, 
 		if (EngineIsIdle())
 			StopEngine(engine);
 
-		if (! socket_readable(socket, 1000))	// timeout 1 s
+		if (!socket_readable(socket, 1000))	// timeout 1 s
 			continue;
 
 		input_tensor = service_request(socket, &msgcode);
-		if (! tensor_valid(input_tensor))
+		if (!tensor_valid(input_tensor))
 			continue;
 
 		if (msgcode == service_code) {
@@ -468,7 +496,7 @@ int OnnxService(char *endpoint, char *onnx_file, int service_code, int use_gpu, 
 			// Real service ...
 			time_reset();
 			output_tensor = TensorForward(engine, input_tensor);
-			time_spend((char *)"Predict");
+			time_spend((char *) "Predict");
 
 			service_response(socket, service_code, output_tensor);
 			tensor_destroy(output_tensor);
@@ -489,7 +517,8 @@ int OnnxService(char *endpoint, char *onnx_file, int service_code, int use_gpu, 
 	return RET_OK;
 }
 
-int OnnxServiceFromArray(char *endpoint,  void* model_data, size_t model_data_length, int service_code, int use_gpu, CustomSevice custom_service_function)
+int OnnxServiceFromArray(char *endpoint, void *model_data, size_t model_data_length, int service_code, int use_gpu,
+						 CustomSevice custom_service_function)
 {
 	int socket, count, msgcode;
 	TENSOR *input_tensor, *output_tensor;
@@ -498,7 +527,7 @@ int OnnxServiceFromArray(char *endpoint,  void* model_data, size_t model_data_le
 	if ((socket = server_open(endpoint)) < 0)
 		return RET_ERROR;
 
-	if (! custom_service_function)
+	if (!custom_service_function)
 		custom_service_function = service_response;
 
 	count = 0;
@@ -506,11 +535,11 @@ int OnnxServiceFromArray(char *endpoint,  void* model_data, size_t model_data_le
 		if (EngineIsIdle())
 			StopEngine(engine);
 
-		if (! socket_readable(socket, 1000))	// timeout 1 s
+		if (!socket_readable(socket, 1000))	// timeout 1 s
 			continue;
 
 		input_tensor = service_request(socket, &msgcode);
-		if (! tensor_valid(input_tensor))
+		if (!tensor_valid(input_tensor))
 			continue;
 
 		if (msgcode == service_code) {
@@ -520,7 +549,7 @@ int OnnxServiceFromArray(char *endpoint,  void* model_data, size_t model_data_le
 			// Real service ...
 			time_reset();
 			output_tensor = TensorForward(engine, input_tensor);
-			time_spend((char *)"Predict");
+			time_spend((char *) "Predict");
 			service_response(socket, service_code, output_tensor);
 			tensor_destroy(output_tensor);
 			count++;
@@ -541,7 +570,7 @@ int OnnxServiceFromArray(char *endpoint,  void* model_data, size_t model_data_le
 
 TENSOR *OnnxRPC(int socket, TENSOR * input, int reqcode)
 {
-	int rescode  = -1;
+	int rescode = -1;
 	TENSOR *output = NULL;
 
 	CHECK_TENSOR(input);
@@ -549,30 +578,33 @@ TENSOR *OnnxRPC(int socket, TENSOR * input, int reqcode)
 	if (tensor_send(socket, reqcode, input) == RET_OK) {
 		output = tensor_recv(socket, &rescode);
 	}
-    if (rescode != reqcode) {
-    	// Bad service response
-    	syslog_error("Remote running service.");
-    	tensor_destroy(output);
-    	return NULL;
-    }
+	if (rescode != reqcode) {
+		// Bad service response
+		syslog_error("Remote running service.");
+		tensor_destroy(output);
+		return NULL;
+	}
 	return output;
 }
 
-TENSOR *ResizeOnnxRPC(int socket, TENSOR *send_tensor, int reqcode, int multiples)
+TENSOR *ResizeOnnxRPC(int socket, TENSOR * send_tensor, int reqcode, int multiples)
 {
 	int nh, nw;
 	TENSOR *resize_send, *resize_recv, *recv_tensor;
 
 	CHECK_TENSOR(send_tensor);
 
-	nh = (send_tensor->height + multiples - 1)/multiples; nh *= multiples;
-	nw = (send_tensor->width + multiples - 1)/multiples; nw *= multiples;
+	nh = (send_tensor->height + multiples - 1) / multiples;
+	nh *= multiples;
+	nw = (send_tensor->width + multiples - 1) / multiples;
+	nw *= multiples;
 
 	if (send_tensor->height == nh && send_tensor->width == nw) {
 		// Normal onnx RPC
 		recv_tensor = OnnxRPC(socket, send_tensor, reqcode);
 	} else {
-		resize_send = tensor_zoom(send_tensor, nh, nw); CHECK_TENSOR(resize_send);
+		resize_send = tensor_zoom(send_tensor, nh, nw);
+		CHECK_TENSOR(resize_send);
 		resize_recv = OnnxRPC(socket, resize_send, reqcode);
 		recv_tensor = tensor_zoom(resize_recv, send_tensor->height, send_tensor->width);
 		tensor_destroy(resize_recv);
@@ -582,21 +614,24 @@ TENSOR *ResizeOnnxRPC(int socket, TENSOR *send_tensor, int reqcode, int multiple
 	return recv_tensor;
 }
 
-TENSOR *ZeropadOnnxRPC(int socket, TENSOR *send_tensor, int reqcode, int multiples)
+TENSOR *ZeropadOnnxRPC(int socket, TENSOR * send_tensor, int reqcode, int multiples)
 {
 	int nh, nw;
 	TENSOR *resize_send, *resize_recv, *recv_tensor;
 
 	CHECK_TENSOR(send_tensor);
 
-	nh = (send_tensor->height + multiples - 1)/multiples; nh *= multiples;
-	nw = (send_tensor->width + multiples - 1)/multiples; nw *= multiples;
+	nh = (send_tensor->height + multiples - 1) / multiples;
+	nh *= multiples;
+	nw = (send_tensor->width + multiples - 1) / multiples;
+	nw *= multiples;
 
 	if (send_tensor->height == nh && send_tensor->width == nw) {
 		// Normal onnx RPC
 		recv_tensor = OnnxRPC(socket, send_tensor, reqcode);
 	} else {
-		resize_send = tensor_zeropad(send_tensor, nh, nw); CHECK_TENSOR(resize_send);
+		resize_send = tensor_zeropad(send_tensor, nh, nw);
+		CHECK_TENSOR(resize_send);
 		resize_recv = OnnxRPC(socket, resize_send, reqcode);
 		recv_tensor = tensor_zeropad(resize_recv, send_tensor->height, send_tensor->width);
 		tensor_destroy(resize_recv);
@@ -606,21 +641,21 @@ TENSOR *ZeropadOnnxRPC(int socket, TENSOR *send_tensor, int reqcode, int multipl
 	return recv_tensor;
 }
 
-void SaveOutputImage(IMAGE *image, char *filename)
+void SaveOutputImage(IMAGE * image, char *filename)
 {
 	char output_filename[256], *p;
 
-	mkdir("output", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH); 
+	mkdir("output", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
 
 	if (image_valid(image)) {
 		p = strrchr(filename, '/');
-	 	p = (! p)? filename : p + 1;
+		p = (!p) ? filename : p + 1;
 		snprintf(output_filename, sizeof(output_filename) - 1, "output/%s", p);
 		image_save(image, output_filename);
 	}
 }
 
-void SaveTensorAsImage(TENSOR *tensor, char *filename)
+void SaveTensorAsImage(TENSOR * tensor, char *filename)
 {
 	IMAGE *image = image_from_tensor(tensor, 0);
 
@@ -636,7 +671,7 @@ int CudaAvailable()
 	OrtStatus *status;
 	OrtSessionOptions *session_options;
 
-  	CheckStatus(onnx_runtime_api->CreateSessionOptions(&session_options));
+	CheckStatus(onnx_runtime_api->CreateSessionOptions(&session_options));
 	status = OrtSessionOptionsAppendExecutionProvider_CUDA(session_options, 0);
 	if (status != NULL) {
 		const char *msg = onnx_runtime_api->GetErrorMessage(status);
@@ -654,13 +689,13 @@ char *FindModel(char *modelname)
 	char filename[256];
 
 	snprintf(filename, sizeof(filename), "%s", modelname);
-	if(access(filename, F_OK) == 0) {
+	if (access(filename, F_OK) == 0) {
 		CheckPoint("Found Model: %s", filename);
 		return strdup(filename);
 	}
 
 	snprintf(filename, sizeof(filename), "%s/%s", ONNXMODEL_INSTALL_DIR, modelname);
-	if(access(filename, F_OK) == 0) {
+	if (access(filename, F_OK) == 0) {
 		CheckPoint("Found Model: %s", filename);
 		return strdup(filename);
 	}
@@ -668,3 +703,4 @@ char *FindModel(char *modelname)
 	syslog_error("Model %s NOT Found !", modelname);
 	return NULL;
 }
+
