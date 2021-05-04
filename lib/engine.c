@@ -20,6 +20,7 @@
 
 #include "engine.h"
 #include "grid_sample.h"
+#include "dcnv2_forward.h"
 
 // ONNX Runtime Engine
 #define MAKE_FOURCC(a,b,c,d) (((DWORD)(a) << 24) | ((DWORD)(b) << 16) | ((DWORD)(c) << 8) | ((DWORD)(d) << 0))
@@ -36,10 +37,11 @@ extern float *OrtTensorValues(OrtValue * tensor);
 extern void DestroyOrtTensor(OrtValue * tensor);
 
 const OrtApi *onnx_runtime_api = OrtGetApiBase()->GetApi(ORT_API_VERSION);
-const char *c_CustomOpDomain = "onnx";
+const char *c_CustomOpDomain = "onnxservice";
 GridSampleOp c_GridSampleOp;
+DCNv2ForwardOp c_DCNv2ForwardOp;
 
-int RegisterGridSampler(OrtSessionOptions *options)
+int RegisterOurOps(OrtSessionOptions *options)
 {
 	OrtCustomOpDomain *domain = nullptr;
 
@@ -53,10 +55,13 @@ int RegisterGridSampler(OrtSessionOptions *options)
 		return RET_ERROR;
 	}
 
+	if (onnx_runtime_api->CustomOpDomain_Add(domain, &c_DCNv2ForwardOp)) {
+		syslog_error("CustomOpDomain_Add: DCNv2ForwardOp");
+		return RET_ERROR;
+	}
+
 	return onnx_runtime_api->AddCustomOpDomain(options, domain)? RET_ERROR : RET_OK;
 }
-
-
 
 void InitInputNodes(OrtEngine * t)
 {
@@ -258,8 +263,8 @@ OrtEngine *CreateEngine(char *model_path, int use_gpu)
 	CheckStatus(onnx_runtime_api->CreateSessionOptions(&(t->session_options)));
 	// CheckStatus(onnx_runtime_api->SetIntraOpNumThreads(t->session_options, 0));  // 0 -- for default 
 
-	// RegisterGridSampler, support onnx::grid_sampler
-	RegisterGridSampler(t->session_options);
+	// RegisterOurOps, support onnx::grid_sampler
+	RegisterOurOps(t->session_options);
 
 	// Sets graph optimization level
 	CheckStatus(onnx_runtime_api->SetSessionGraphOptimizationLevel(t->session_options, ORT_ENABLE_ALL));
@@ -312,8 +317,8 @@ OrtEngine *CreateEngineFromArray(void *model_data, size_t model_data_length, int
 	CheckStatus(onnx_runtime_api->CreateSessionOptions(&(t->session_options)));
 	// CheckStatus(onnx_runtime_api->SetIntraOpNumThreads(t->session_options, 0));  // 0 -- for default 
 
-	// RegisterGridSampler, support onnx::grid_sampler
-	RegisterGridSampler(t->session_options);
+	// RegisterOurOps, support onnx::grid_sampler
+	RegisterOurOps(t->session_options);
 
 	// Sets graph optimization level
 	CheckStatus(onnx_runtime_api->SetSessionGraphOptimizationLevel(t->session_options, ORT_ENABLE_ALL));

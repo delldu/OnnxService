@@ -20,7 +20,6 @@
 // Image clean model input: 1x3x(-1)x(-1), output 1x3x(-1)x(-1)
 int server(char *endpoint, int use_gpu)
 {
-	InitEngineRunningTime(); // Avoid compiler complaint
 	return OnnxService(endpoint, (char *)"image_clean.onnx", IMAGE_CLEAN_SERVICE, use_gpu, NULL);
 }
 

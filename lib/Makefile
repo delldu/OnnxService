@@ -16,7 +16,8 @@ INCS	:= -I$(ONNXRUNTIME_INSTALL_DIR)/include $(shell nimagetool --cflags)
 
 SOURCE :=  \
 	engine.c \
-	grid_sample.c
+	grid_sample.c \
+ 	dcnv2_forward.c
 
 DEFINES := -D_GLIBCXX_USE_CXX11_ABI=1 -std=c++14 -std=gnu++14 \
 		-DONNXMODEL_INSTALL_DIR="\"$(ONNXMODEL_INSTALL_DIR)\""

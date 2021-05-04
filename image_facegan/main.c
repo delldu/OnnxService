@@ -13,13 +13,21 @@
 #include <syslog.h>
 #include <pthread.h>
 
+
+// #include <iostream>
+// #include <iomanip>
+// #include <string>
+// #include <map>
+#include <random>
+// #include <cmath>
+
+
 #include <nimage/image.h>
 #include <nimage/nnmsg.h>
 
 #include "engine.h"
-#include "cmaes.h"
 
-#define LAMBDA 22		// CMA population size
+#define SEED_FACES 12
 #define W_SPACE_DIM 512
 
 #define DEBUG 1
@@ -33,17 +41,19 @@ TENSOR *standard_tensor = NULL;		// Search Reference tensor !!!
 typedef struct {				/* Used as argument to fit_start() */
 	pthread_t id;				/* ID returned by pthread_create() */
 	int no;						/* Sub thread */
-	double x[W_SPACE_DIM], y;
-} THREAD_INFOS;
+	float x[2][W_SPACE_DIM], y[2];
+	float lr;	// learning rate
+} FACE_CELL;
 
 float random_gauss()
 {
+#if 1
 	// Marsaglia and Bray 1964
     static double V1, V2, S;
     static int phase = 0;
     double X;
      
-    if ( phase == 0 ) {
+    if (phase == 0) {
         do {
             double U1 = (double)rand() / RAND_MAX;
             double U2 = (double)rand() / RAND_MAX;
@@ -61,7 +71,33 @@ float random_gauss()
     phase = 1 - phase;
  
     return (float)X;
+#else
+	double u = ((double) rand() / (RAND_MAX)) * 2 - 1;
+	double v = ((double) rand() / (RAND_MAX)) * 2 - 1;
+	double r = u * u + v * v;
+	if (r == 0 || r > 1)
+		return random_gauss();
+	
+	double c = sqrt(-2 * log(r) / r);
+
+	return (float)(u * c);
+
+#endif
 }
+
+int face_sample(FACE_CELL *optimizer)
+{
+	int i, j;
+
+	for (i = 0; i < 2; i++) {
+		for (j = 0; j < W_SPACE_DIM; j++)
+			optimizer->x[i][j] = random_gauss();
+	}
+
+	// optimizer_calculate(optimizer, i);
+	return RET_OK;
+}
+
 
 void output_image(TENSOR *tensor, const char *prefix, int index)
 {
@@ -73,13 +109,60 @@ void output_image(TENSOR *tensor, const char *prefix, int index)
 TENSOR *random_zcode()
 {
 	int i;
+#if 0	
+	float bad[] = {
+0.04,-0.05,-1.74,0.12,0.83,0.21,0.40,0.51,1.94,1.19,1.17,0.43,-0.85,2.37,-0.71,-1.39,-1.10,0.07,0.34,0.00,0.31,0.37,-2.07,0.00,-0.60,-0.96,-0.38,-0.35,-0.06,0.13,-1.68,0.57,-0.11,-1.36,-0.71,-0.53,0.24,0.27,-0.72,-1.61,-0.23,1.47,1.21,2.23,-1.90,0.32,-0.47,-1.28,-0.60,0.35,1.71,-0.62,0.52,-1.33,0.95,-0.66,0.13,-1.03,1.34,-0.68,1.91,-0.76,0.33,-0.53,-0.35,-0.92,-2.00,-0.27,0.30,0.20,1.01,0.03,-0.47,1.35,-0.12,-0.00,1.62,0.32,2.51,0.06,0.77,0.15,1.79,0.90,-0.24,0.05,1.15,0.11,-0.53,-0.44,2.07,-0.25,1.94,0.24,0.17,2.58,-1.56,-0.80,-0.56,-0.30,-0.96,0.01,1.74,1.04,-1.79,0.73,-0.43,-0.39,0.12,0.60,-1.54,-0.32,-0.47,-2.44,0.42,-0.92,0.86,-0.34,1.54,-1.07,-0.34,0.51,0.56,-1.87,0.35,0.03,-0.92,0.34,-1.09,-0.15,-1.02,-0.67,-1.02,-1.94,0.00,-0.39,-0.85,1.11,-0.18,1.44,-0.50,2.39,-1.88,-1.37,0.27,-1.22,-0.11,1.32,0.50,-1.62,1.01,1.23,0.36,0.64,-1.64,0.14,-1.22,0.22,-1.39,0.75,-1.70,-1.14,1.02,-0.83,-0.45,-1.44,2.15,-0.29,-1.17,-0.21,-0.23,0.12,0.92,1.04,-1.61,-1.90,2.14,-1.01,0.20,1.11,-0.45,-1.46,-0.65,1.23,0.28,-0.82,-0.16,1.20,-0.47,0.31,0.60,-0.37,1.82,-0.82,-0.96,-1.14,-0.09,0.08,2.12,1.09,-0.98,1.21,-0.70,-0.17,1.45,-0.50,-1.45,1.40,-0.37,1.19,-3.06,1.20,0.92,-1.83,0.72,0.70,-0.75,0.93,0.14,0.39,0.97,-0.36,0.88,-0.07,-0.43,-1.56,1.93,0.03,2.11,-0.57,-0.55,-0.25,1.20,0.19,1.24,-0.31,0.86,0.22,-0.46,-0.48,-0.36,1.01,-1.03,0.20,1.05,-0.45,1.03,1.38,1.72,0.41,-1.00,0.42,1.05,2.35,0.38,-0.25,-0.88,0.09,0.30,1.45,-1.63,-0.87,-0.39,-0.86,0.66,-0.55,-0.21,-0.94,1.12,0.13,1.10,1.13,0.70,-0.30,-1.46,1.50,1.02,0.11,-1.59,-0.53,0.64,-1.15,1.35,-0.98,-0.84,-0.72,-1.11,0.10,2.08,-0.37,2.06,-0.24,1.63,-0.73,-0.03,-1.04,0.31,-2.15,0.61,-1.13,-0.56,0.07,1.21,-2.38,-1.23,-0.30,0.50,-0.06,2.54,-0.04,-1.07,-1.12,1.17,0.11,0.03,0.26,-0.29,1.69,0.51,-0.84,-0.37,-0.32,-1.23,0.94,0.06,0.69,1.01,0.22,-0.10,-2.64,-0.74,0.33,-0.33,0.16,-1.12,-0.42,0.84,0.16,1.41,-0.13,1.86,0.03,0.37,0.98,0.24,0.51,0.13,-1.58,1.03,-0.30,1.10,-0.50,0.46,0.48,-0.25,0.08,0.35,-0.42,-0.42,0.82,1.17,-0.04,-0.36,0.51,0.04,-1.17,-2.64,1.25,-0.50,-0.33,1.33,0.71,1.87,-0.55,0.26,-1.42,1.73,-0.84,2.50,-0.13,1.43,-0.46,-0.62,1.01,0.55,-0.16,0.43,-0.35,1.49,-1.13,-0.31,-0.82,0.94,-0.06,-0.28,0.79,-0.33,-0.67,0.01,0.24,0.11,-0.82,-0.71,-0.62,-0.02,1.41,0.91,-0.92,-0.26,-0.13,0.36,-0.90,1.40,0.02,-2.10,-0.37,0.71,0.37,0.43,1.41,2.03,-0.26,-0.62,2.33,-1.22,0.96,0.52,0.42,-0.84,2.54,-0.21,0.09,0.28,-0.85,-0.93,0.27,-0.53,-0.33,0.35,-0.47,0.76,-0.10,0.03,0.15,0.22,-0.63,0.16,0.68,1.61,-0.35,0.72,-0.96,0.67,0.25,-0.03,0.26,-0.21,-2.23,0.78,0.19,0.96,-1.52,1.85,1.49,-1.41,-0.92,0.73,-0.97,0.98,-0.58,-1.44,-0.21,-0.43,1.24,-0.31,-1.02,-0.26,-0.43,-0.86,-1.37,0.70,-0.44,0.29,0.15,-1.03,-0.38,1.38,0.90,1.41,0.77,-1.23,-0.72,-1.19,0.53,-0.03,-0.28,0.42,0.15,-0.39,-2.07,-0.09,1.15,-0.16,1.77,0.28,-1.71,-0.82,-1.09,-0.43,1.21,0.68,-0.00
+	};
+#endif
+
 	TENSOR *zcode_tensor;
+
+	srand(time(NULL));
 
 	// Create zcode tensor
 	zcode_tensor = tensor_create(1, 1, 1, W_SPACE_DIM);
 	CHECK_TENSOR(zcode_tensor);
-	for (i = 0; i < W_SPACE_DIM; i++)
-		zcode_tensor->data[i] = random_gauss();
+
+
+    std::random_device rd{};
+    std::mt19937 gen{rd()};
+ 
+    // values near the mean are the most likely
+    // standard deviation affects the dispersion of generated values from the mean
+    std::normal_distribution<float> dis{0.0, 1.0};
+	for (i = 0; i < W_SPACE_DIM; i++) {
+		zcode_tensor->data[i] = dis(gen);
+	} 
+
+#if 1
+	float d, stdv, mean;
+	mean = stdv = 0.0;
+	for (i = 0; i < W_SPACE_DIM; i++) {
+		// d = random_gauss();
+		// d = bad[i];
+
+		d = zcode_tensor->data[i];
+		mean += d;
+		stdv += d * d;
+	}
+	mean /= W_SPACE_DIM;
+	stdv /= W_SPACE_DIM;
+	stdv -= mean * mean;
+	stdv = sqrtf(stdv);
+
+	CheckPoint("---------- mean = %.2f, stdv = %.2f", mean, stdv);
+	printf("[");
+	for (i = 0; i < W_SPACE_DIM; i++) {
+		printf("%0.2f", zcode_tensor->data[i]);
+		if (i == W_SPACE_DIM - 1) {
+			printf("]");
+		} else {
+			printf(",");
+		}
+	}
+	printf("\n");
+	CheckPoint("");
+#endif
 
 	return zcode_tensor;
 }
@@ -139,7 +222,7 @@ float wcode_loss(TENSOR *wcode_tensor)
 	}
 
 	#if 1 // DEBUG
-	output_image(output_image_tensor, "face-", (face_index++) % LAMBDA);
+	output_image(output_image_tensor, "face-", (face_index++) % SEED_FACES);
 	#endif
 
 	// Compute loss, maybe we need more complex method !!!
@@ -184,15 +267,15 @@ float wcode_loss(TENSOR *wcode_tensor)
 
 static void *fit_start(void *arg)
 {
-	THREAD_INFOS *info = (THREAD_INFOS *)arg;
+	FACE_CELL *info = (FACE_CELL *)arg;
 
 	CheckEngine(decoder_engine);
 
 	// syslog_info("Running thread %d ...", info->no);
 	// Create input tensor
 	TENSOR *wcode_tensor;
-	wcode_tensor = create_wtensor(info->x);
-	info->y = wcode_loss(wcode_tensor);
+	// xxxx8888 wcode_tensor = create_wtensor(info->x);
+	// info->y = wcode_loss(wcode_tensor);
 	// Release tensors
 	tensor_destroy(wcode_tensor);
 	// syslog_info("Thread %d result = %.4f", info->no, info->y);
@@ -200,202 +283,75 @@ static void *fit_start(void *arg)
 	return NULL;
 }
 
-// The following code borrow from cmaes_SamplePopulation for wcode samples
-double *const *cmaes_SamplePopulationFromWSpace(cmaes_t * t)
+float *do_real_searching(int epochs)
 {
-	int iNk, i, j, N = t->sp.N;
-	int flgdiag = ((t->sp.diagonalCov == 1) || (t->sp.diagonalCov >= t->gen));
-	double sum;
-	double const *xmean = t->rgxmean;
-	TENSOR *wcode_tensor;
-
-	/* cmaes_SetMean(t, xmean); * xmean could be changed at this point */
-
-	/* calculate eigensystem  */
-	if (!t->flgEigensysIsUptodate) {
-		if (!flgdiag)
-			cmaes_UpdateEigensystem(t, 0);
-		else {
-			for (i = 0; i < N; ++i)
-				t->rgD[i] = sqrt(t->C[i][i]);
-			t->minEW = douSquare(rgdouMin(t->rgD, N));
-			t->maxEW = douSquare(rgdouMax(t->rgD, N));
-			t->flgEigensysIsUptodate = 1;
-			cmaes_timings_start(&t->eigenTimings);
-		}
-	}
-
-	/* treat minimal standard deviations and numeric problems */
-	TestMinStdDevs(t);
-
-	// CheckPoint("flgdiag = %d", flgdiag); flgdiag == 0
-
-	for (iNk = 0; iNk < t->sp.lambda; ++iNk) {	/* generate scaled cmaes_random vector (D * z)    */
-		// Sample randn(N)
-		wcode_tensor = random_wcode();
-		if (! tensor_valid(wcode_tensor)) {
-			syslog_error("Create wcode tensor !!!");
-			continue;
-		}
-		for (i = 0; i < N; ++i) {
-			if (flgdiag)
-				t->rgrgx[iNk][i] = xmean[i] + t->sigma * t->rgD[i] * (double)wcode_tensor->data[i];
-			else
-				t->rgdTmp[i] = t->rgD[i] * (double)wcode_tensor->data[i];
-		}
-		if (!flgdiag)
-			/* add mutation (sigma * B * (D*z)) */
-			for (i = 0; i < N; ++i) {
-				for (j = 0, sum = 0.; j < N; ++j)
-					sum += t->B[i][j] * t->rgdTmp[j];
-				t->rgrgx[iNk][i] = xmean[i] + t->sigma * sum;
-			}
-
-		tensor_destroy(wcode_tensor);
-	}
-	if (t->state == 3 || t->gen == 0)
-		++t->gen;
-	t->state = 1;
-
-	return (t->rgrgx);
-}								/* SamplePopulation() */
-
-double *cmaes_search(int epochs)
-{
-	cmaes_t evo;
-	int i, j, lambda, ret;
-	double *cost_values, *xfinal, *const *pop;
-	THREAD_INFOS *info;
+	int i, j, ret, lambda;
+	FACE_CELL *info;
 	pthread_attr_t attr;
-	double xstart[W_SPACE_DIM] = {0};
-	double stddev[W_SPACE_DIM] = {1.0};
 
-	for (i = 0; i < W_SPACE_DIM; i++) {
-		xstart[i] = 0.0;
-		stddev[i] = 1.0;
-	}
+	lambda = SEED_FACES;
 
-	// cost_values = cmaes_init(&evo, W_SPACE_DIM dimmesion, xstart, stddev, 0, / * lambda */, "none");
-	cmaes_init_para(&evo, W_SPACE_DIM /*dimmesion*/, xstart, stddev, 0, LAMBDA  /* lambda */, "none");
-
-	evo.sp.stopMaxIter = epochs;	// stop after given number of iterations (generations)
-	evo.sp.stopFitness.flg = 1;
-	evo.sp.stopFitness.val = 1e-2;	// stop if function value is smaller than stopFitness
-	evo.sp.stopTolFun = 1e-3;		// stop if function value differences are small
-	cost_values =  cmaes_init_final(&evo);
-
-	// dimension = (unsigned int) cmaes_Get(&evo, "dimension");
-	syslog_info("%s", cmaes_SayHello(&evo));
-
-	lambda = cmaes_Get(&evo, "lambda");
-
-	info = (THREAD_INFOS *)calloc(lambda, sizeof(THREAD_INFOS));
+	info = (FACE_CELL *)calloc(lambda, sizeof(FACE_CELL));
 	if (info == NULL)
 		syslog_error("Allocte memory.");
 
-	while (!cmaes_TestForTermination(&evo)) {
-		/* generate lambda new search points, sample population */
-		pop = cmaes_SamplePopulationFromWSpace(&evo);	/* do not change content of pop */
-		/* Initialize thread creation attributes */
-		ret = pthread_attr_init(&attr);
+	ret = pthread_attr_init(&attr);
+	if (ret != 0)
+		syslog_error("Init thread attr.");
+
+	for (i = 0; i < lambda; i++) {
+		info[i].no = i + 1;
+
+		ret = pthread_create(&info[i].id, &attr, &fit_start, &info[i]);
 		if (ret != 0)
-			syslog_error("Init thread attr.");
-
-		// for (i = 0; i < lambda; ++i) {
-		// 	cost_values[i] = fitfun(pop[i], dimension);	/* evaluate */
-		// }
-		for (i = 0; i < lambda; i++) {
-			info[i].no = i + 1;
-			for (j = 0; j < W_SPACE_DIM; j++)
-				info[i].x[j] = pop[i][j];
-			info[i].y = 0.0;
-
-			ret = pthread_create(&info[i].id, &attr, &fit_start, &info[i]);
-			if (ret != 0)
-				syslog_error("Create thread.");
-		}
-		ret = pthread_attr_destroy(&attr);
-		if (ret != 0)
-			syslog_error("Destropy thread attr.");
-
-		/* Now join with each thread */
-		for (i = 0; i < lambda; i++) {
-			ret = pthread_join(info[i].id, NULL);
-			if (ret != 0)
-				syslog_error("Join thread.");
-		}
-
-		// Save cost
-		for (i = 0; i < lambda; i++) {
-			cost_values[i] = info[i].y;
-			// syslog_info("Cost %d = %.4f", i, cost_values[i]);
-		}
-
-		cmaes_UpdateDistribution(&evo, cost_values);	/* assumes that pop[i] has not been modified */
-
-		// if ((int)evo.gen % 5 == 0) {
-		// 	syslog_info("Progress %6.2f %%, loss = %.2lf ...", 
-		// 		(float)(100.0 * evo.gen/epochs),  evo.rgFuncValue[evo.index[0]]);
-		// 	// fflush(stdout);
-		// }
-		syslog_info("Progress %6.2f %%, loss = %.4lf ...", 
-			(float)(100.0 * evo.gen/epochs),  evo.rgFuncValue[evo.index[0]]);
-#if DEBUG
-		// Xbest ...
-		xfinal = cmaes_GetNew(&evo, "xbest");
-		TENSOR *wcode_tensor = create_wtensor(xfinal);
-		TENSOR *output_tensor = TensorForward(decoder_engine, wcode_tensor);
-		output_image(output_tensor, "best-", evo.gen);
-		tensor_destroy(output_tensor);
-		tensor_destroy(wcode_tensor);
-		free(xfinal);
-#endif
-
+			syslog_error("Create thread.");
 	}
+	ret = pthread_attr_destroy(&attr);
+	if (ret != 0)
+		syslog_error("Destropy thread attr.");
+
+	/* Now join with each thread */
+	for (i = 0; i < lambda; i++) {
+		ret = pthread_join(info[i].id, NULL);
+		if (ret != 0)
+			syslog_error("Join thread.");
+	}
+
+	// Save best ...
 	free(info);
 
-	syslog_info("Stop Condition:%s", cmaes_TestForTermination(&evo));	/* print termination reason */
-
-	cmaes_WriteToFile(&evo, "all", "output/cmaes_results.txt");	/* write final results */
-
-	/* get best estimator for the optimum, xmean */
-	xfinal = cmaes_GetNew(&evo, "xmean");
-
-	cmaes_exit(&evo);			/* release memory */
-
-	return xfinal;
+	// xxxx8888
+	return NULL;
 }
 
-TENSOR *wcode_search(TENSOR *reference_tensor)
+TENSOR *face_search(TENSOR *reference_tensor)
 {
 	int i;
-	double *best;
+	float *best;
 	TENSOR *wcode_tensor;
 
 	CHECK_TENSOR(reference_tensor);
 
 	standard_tensor = reference_tensor;
-	best = cmaes_search(100);
+	best = do_real_searching(100);
 
 	// Save best to wcode
 	wcode_tensor = tensor_create(1, 1, 1, W_SPACE_DIM);
 	CHECK_TENSOR(wcode_tensor);
 	for (i = 0; i < W_SPACE_DIM; i++)
-		wcode_tensor->data[i] = (float)best[i];
+		wcode_tensor->data[i] = best[i];
 
 	free(best);
 
 	return wcode_tensor;
 }
 
-int FaceGanService(char *endpoint, int use_gpu)
+int FaceGanService111(char *endpoint, int use_gpu)
 {
 	int socket, lambda, msgcode;
 	TENSOR *input_tensor, *output_tensor, *wcode_tensor;
 
 	srand(time(NULL));
-
-	InitEngineRunningTime(); // Avoid compiler complaint
 
 	if ((socket = server_open(endpoint)) < 0)
 		return RET_ERROR;
@@ -420,7 +376,7 @@ int FaceGanService(char *endpoint, int use_gpu)
 		// msgcode = IMAGE_FACEGAN_SERVICE;
 		// Real service ...
 		time_reset();
-		wcode_tensor = wcode_search(input_tensor); check_tensor(wcode_tensor);
+		wcode_tensor = face_search(input_tensor); check_tensor(wcode_tensor);
 
 		output_tensor = TensorForward(decoder_engine, wcode_tensor);
 		time_spend((char *)"Infer");
@@ -451,9 +407,66 @@ int FaceGanService(char *endpoint, int use_gpu)
 	return RET_OK;
 }
 
+int FaceGanService(char *endpoint, int use_gpu, CustomSevice custom_service_function)
+{
+	int socket, count, msgcode;
+	TENSOR *input_tensor, *output_tensor;
+	OrtEngine *engine = NULL;
+
+	srand(time(NULL));
+
+	if ((socket = server_open(endpoint)) < 0)
+		return RET_ERROR;
+
+	if (!custom_service_function)
+		custom_service_function = service_response;
+
+	count = 0;
+	for (;;) {
+		if (EngineIsIdle())
+			StopEngine(engine);
+
+		if (!socket_readable(socket, 1000))	// timeout 1 s
+			continue;
+
+		input_tensor = service_request(socket, &msgcode);
+		if (!tensor_valid(input_tensor))
+			continue;
+
+		if (msgcode == IMAGE_FACEGAN_SERVICE) {
+			syslog_info("Service %d times", count);
+			StartEngine(engine, "xxxx8888", use_gpu);
+
+			// Real service ...
+			time_reset();
+			output_tensor = TensorForward(engine, input_tensor);
+			time_spend((char *) "Predict");
+
+			service_response(socket, IMAGE_FACEGAN_SERVICE, output_tensor);
+			tensor_destroy(output_tensor);
+
+			count++;
+		} else {
+			// service_response(socket, servicecode, input_tensor)
+			custom_service_function(socket, OUTOF_SERVICE, NULL);
+		}
+
+		tensor_destroy(input_tensor);
+	}
+	StopEngine(engine);
+
+	syslog(LOG_INFO, "Service shutdown.\n");
+	server_close(socket);
+
+	return RET_OK;
+}
+
+
+
+
 int server(char *endpoint, int use_gpu)
 {
-	return FaceGanService(endpoint, use_gpu);
+	return FaceGanService(endpoint, use_gpu, NULL);
 }
 
 int facegan(int socket, char *input_file)
@@ -484,17 +497,17 @@ int facegan(int socket, char *input_file)
 	return RET_OK;
 }
 
-int test()
+int test(int use_gpu)
 {
 	TENSOR *wcode_tensor, *output_tensor;
 	IMAGE *image;
 
 	srand(time(NULL));
 
-	transformer_engine = CreateEngine((char *)"image_gantransformer.onnx", 0);
+	transformer_engine = CreateEngine((char *)"image_gantransformer.onnx", use_gpu);
 	CheckEngine(transformer_engine);
 
-	decoder_engine = CreateEngine((char *)"image_gandecoder.onnx", 0);
+	decoder_engine = CreateEngine((char *)"image_gandecoder.onnx", use_gpu);
 	CheckEngine(decoder_engine);
 
 	time_reset();
@@ -506,7 +519,7 @@ int test()
 	time_spend((char *)"Infer");
 
 	image = image_from_tensor(output_tensor, 0);
-	image_save(image, "test.png");
+	image_show(image, "Face");
 	image_destroy(image);
 	
 	tensor_destroy(output_tensor);
@@ -526,7 +539,7 @@ void help(char *cmd)
 	printf("    h, --help                   Display this help.\n");
 	printf("    e, --endpoint               Set endpoint.\n");
 	printf("    s, --server <0 | 1>         Start server (use gpu).\n");
-	printf("    t, --test                   Test.\n");
+	printf("    t, --test <0 | 1>           Test (use gpu).\n");
 
 	exit(1);
 }
@@ -545,7 +558,7 @@ int main(int argc, char **argv)
 		{"help", 0, 0, 'h'},
 		{"endpoint", 1, 0, 'e'},
 		{"server", 1, 0, 's'},
-		{"test", 0, 0, 't'},
+		{"test", 1, 0, 't'},
 
 		{0, 0, 0, 0}
 	};
@@ -553,7 +566,7 @@ int main(int argc, char **argv)
 	if (argc <= 1)
 		help(argv[0]);
 
-	while ((optc = getopt_long(argc, argv, "h e: s: t", long_opts, &option_index)) != EOF) {
+	while ((optc = getopt_long(argc, argv, "h e: s: t:", long_opts, &option_index)) != EOF) {
 		switch (optc) {
 		case 'e':
 			endpoint = optarg;
@@ -563,7 +576,7 @@ int main(int argc, char **argv)
 			use_gpu = atoi(optarg);
 			break;
 		case 't':
-			return test();
+			return test(atoi(optarg));
 			break;
 
 		case 'h':				// help

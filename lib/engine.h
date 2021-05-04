@@ -93,7 +93,7 @@ do { \
 	engine = NULL; \
 } while(0)
 
-#define InitEngineRunningTime() do { engine_last_running_time = 0; } while(0)
+// #define InitEngineRunningTime() do { engine_last_running_time = 0; } while(0)
 #define EngineIsIdle() (time_now() - engine_last_running_time > ENGINE_IDLE_TIME)
 
 #endif							// _ENGINE_H
