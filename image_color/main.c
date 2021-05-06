@@ -182,6 +182,7 @@ TENSOR *blend_fake(TENSOR *source, TENSOR *fake_ab)
 // Image color model input: 1 x 4 x (-1) x (-1)， output: 1 x 2 x (-1) x (-1)
 int color_server(char *endpoint, int use_gpu)
 {
+	InitEngineRunningTime();	// aviod compiler compaint
 	return OnnxService(endpoint, (char *)"image_color.onnx", IMAGE_COLOR_SERVICE, use_gpu, color_optimizer);
 }
 

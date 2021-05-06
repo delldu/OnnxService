@@ -19,6 +19,8 @@
 
 int server(char *endpoint, int use_gpu)
 {
+	InitEngineRunningTime();	// aviod compiler compaint
+	
 	// Patch model input: 1 x 4 x (-1) x (-1), 1 x 3 x (-1) x (-1)
 	return OnnxService(endpoint, (char *)"image_patch.onnx", IMAGE_PATCH_SERVICE, use_gpu, NULL);
 }

@@ -25,6 +25,8 @@ int server(char *endpoint, int use_gpu)
 	OrtEngine *engine = NULL;
 	OrtEngine *pan_engine = NULL;
 
+	InitEngineRunningTime();	// aviod compiler compaint
+
 	if ((socket = server_open(endpoint)) < 0)
 		return RET_ERROR;
 

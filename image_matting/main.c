@@ -19,6 +19,8 @@
 
 int server(char *endpoint, int use_gpu)
 {
+	InitEngineRunningTime();	// aviod compiler compaint
+	
 	// Matting model input: 1x3x(-1)x(-1), output 1x1x(-1)x(-1)
 	return OnnxService(endpoint, (char *)"image_matting.onnx", IMAGE_MATTING_SERVICE, use_gpu, NULL);
 }
