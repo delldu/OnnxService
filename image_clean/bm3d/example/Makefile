@@ -2,37 +2,37 @@
 #***
 #***	Copyright 2020 Dell(18588220928g@163.com), All Rights Reserved.
 #***
-#***	File Author: Dell, 2020-11-22 02:26:07
+#***	File Author: Dell, 2020-11-20 16:51:50
 #***
 #************************************************************************************/
 #
-CUDA_INSTALL_DIR=/usr/local/cuda-10.2
-INSTALL_DIR := $(shell grep -w INSTALL_DIR ../Makefile | cut -d '=' -f 2)
-ONNXRUNTIME_INSTALL_DIR := $(shell grep -w ONNXRUNTIME_INSTALL_DIR ../Makefile | cut -d '=' -f 2)
-ONNXMODEL_INSTALL_DIR := $(shell grep -w ONNXMODEL_INSTALL_DIR ../Makefile | cut -d '=' -f 2)
+INSTALL_DIR := /usr/local/bin
+CUDA_INSTALL_DIR := /usr/local/cuda-10.2
 
-TARGET := image_clean
+TARGET := bm3d
 
 SOURCE :=  \
 	main.c
 
-INCS	:= -I../lib -I$(ONNXRUNTIME_INSTALL_DIR)/include $(shell nimagetool --cflags)
-
-LIBS	:= -L../lib -lonnxeng -L$(ONNXRUNTIME_INSTALL_DIR)/lib -lonnxruntime \
+INCS	:= -I..
+	#  -I$(BUILD_DIR)/include
+LIBS	:= -L.. -lbm3d \
+		-L$(CUDA_INSTALL_DIR)/lib64 -lcudart_static \
 		$(shell nimagetool --libs) \
-		-Wl,-rpath=$(ONNXRUNTIME_INSTALL_DIR)/lib \
-		-Lbm3d -lbm3d -L$(CUDA_INSTALL_DIR)/lib64 -lcudart_static -ldl -lrt
+		-ldl -lrt
 
+#-L$(BUILD_DIR)/lib -lstd... -lstdc++
 
-DEFINES := -D_GLIBCXX_USE_CXX11_ABI=1 -std=c++14 -std=gnu++14
+DEFINES :=
 
-
-CXXFLAGS := -O2 -fPIC -Wall -Wextra
+# CFLAGS := -O2 -fPIC -Wall -Wextra
+CXXFLAGS := -O2 -fPIC -Wall -Wextra --std=c++11
 LDFLAGS := -fPIC
 
 #****************************************************************************
 # Makefile code common to all platforms
 #****************************************************************************
+CFLAGS   := ${CFLAGS} ${DEFINES}
 CXXFLAGS := ${CXXFLAGS} ${DEFINES}
 
 OBJECT := $(addsuffix .o,$(basename ${SOURCE}))
@@ -43,21 +43,15 @@ OBJECT := $(addsuffix .o,$(basename ${SOURCE}))
 all: ${TARGET}
 
 ${TARGET}: ${OBJECT}
-	$(MAKE) -C bm3d
 	${CXX} ${LDFLAGS} -o ${TARGET} ${OBJECT} ${LIBS}
+
+main.o: main.c
+	${CXX} ${CXXFLAGS} ${INCS} -c $< -o $@
 
 install:
 	install -m 755 ${TARGET} ${INSTALL_DIR}/bin
-	cp image_clean.service /lib/systemd/system/
-	systemctl daemon-reload
-	mkdir -p $(ONNXMODEL_INSTALL_DIR)
-	cp *.onnx $(ONNXMODEL_INSTALL_DIR)
 
-#****************************************************************************
-# common rules
-#****************************************************************************
-%.o : %.c
-	${CXX} ${CXXFLAGS} ${INCS} -c $< -o $@
+
 
 #****************************************************************************
 # Depend block
@@ -65,5 +59,4 @@ install:
 depend:
 
 clean:
-	$(MAKE) -C bm3d clean
 	rm -f core ${OBJECT} ${TARGET}

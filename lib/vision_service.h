@@ -9,7 +9,7 @@
 #ifndef _ONNX_SERVICE_H
 #define _ONNX_SERVICE_H
 
-#define DEFINE_SERVICE_CODE(major, minor) (((major) & 0xff << 8) | ((minor) & 0xff) << 16)
+#define DEFINE_SERVICE_CODE(major, minor) ((((major) & 0xff) << 24) | ((minor) & 0xff) << 16)
 #define SERVICE_CODE(msgcode) ((msgcode) & 0xffff0000)
 #define SERVICE_ARGUMENT(msgcode) ((msgcode) & 0xffff)
 #define DEFINE_SERVICE(service_code, service_arg) (((service_code) & 0xffff0000) | ((service_arg) & 0xffff))
@@ -30,6 +30,7 @@
 #define IMAGE_CLEAN_SERVICE DEFINE_SERVICE_CODE(1,1)
 #define IMAGE_CLEAN_SERVICE_WITH_GUIDED_FILTER DEFINE_SERVICE_CODE(1,2)
 #define IMAGE_CLEAN_SERVICE_WITH_BM3D DEFINE_SERVICE_CODE(1,3)
+#define IMAGE_CLEAN_SERVICE_WITH_DEHAZE DEFINE_SERVICE_CODE(1,4)
 #define IMAGE_CLEAN_URL "tcp://127.0.0.1:9001"
 
 #define IMAGE_COLOR_SERVICE DEFINE_SERVICE_CODE(2,1)
