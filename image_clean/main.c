@@ -142,7 +142,7 @@ int CleanOnnxService(char *endpoint, char *onnx_file, int use_gpu, CustomSevice 
 			output_tensor = guide_filter(input_tensor, SERVICE_ARGUMENT(msgcode));
 			time_spend((char *) "Guided cleaning");
 
-			service_response(socket, IMAGE_CLEAN_SERVICE, output_tensor);
+			service_response(socket, IMAGE_CLEAN_SERVICE_WITH_GUIDED_FILTER, output_tensor);
 			tensor_destroy(output_tensor);
 		} else if (SERVICE_CODE(msgcode) == IMAGE_CLEAN_SERVICE_WITH_BM3D) {
 			// Real service ...
@@ -150,7 +150,7 @@ int CleanOnnxService(char *endpoint, char *onnx_file, int use_gpu, CustomSevice 
 			output_tensor = bm3d_filter(input_tensor, SERVICE_ARGUMENT(msgcode));
 			time_spend((char *) "BM3D cleaning");
 
-			service_response(socket, IMAGE_CLEAN_SERVICE, output_tensor);
+			service_response(socket, IMAGE_CLEAN_SERVICE_WITH_BM3D, output_tensor);
 			tensor_destroy(output_tensor);
 		} else if (SERVICE_CODE(msgcode) == IMAGE_CLEAN_SERVICE_WITH_DEHAZE) {
 			// Real service ...
@@ -158,7 +158,7 @@ int CleanOnnxService(char *endpoint, char *onnx_file, int use_gpu, CustomSevice 
 			output_tensor = haze_filter(input_tensor, SERVICE_ARGUMENT(msgcode));
 			time_spend((char *) "Haze cleaning");
 
-			service_response(socket, IMAGE_CLEAN_SERVICE, output_tensor);
+			service_response(socket, IMAGE_CLEAN_SERVICE_WITH_DEHAZE, output_tensor);
 			tensor_destroy(output_tensor);
 		} else {
 			// service_response(socket, servicecode, input_tensor)
