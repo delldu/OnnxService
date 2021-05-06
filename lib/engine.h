@@ -46,6 +46,8 @@ typedef int (*CustomSevice) (int, int, TENSOR *);
             } \
     } while(0)
 
+int IsRunning(char *progname);
+
 OrtEngine *CreateEngine(char *model_path, int use_gpu);
 OrtEngine *CreateEngineFromArray(void *model_data, size_t model_data_length, int use_gpu);
 
@@ -93,7 +95,7 @@ do { \
 	engine = NULL; \
 } while(0)
 
-// #define InitEngineRunningTime() do { engine_last_running_time = 0; } while(0)
+#define InitEngineRunningTime() do { engine_last_running_time = 0; } while(0)
 #define EngineIsIdle() (time_now() - engine_last_running_time > ENGINE_IDLE_TIME)
 
 #endif							// _ENGINE_H

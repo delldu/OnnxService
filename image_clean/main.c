@@ -17,9 +17,12 @@
 
 #include "engine.h"
 
+
 // Image clean model input: 1x3x(-1)x(-1), output 1x3x(-1)x(-1)
 int server(char *endpoint, int use_gpu)
 {
+	InitEngineRunningTime();	// aviod compiler compaint
+
 	return OnnxService(endpoint, (char *)"image_clean.onnx", IMAGE_CLEAN_SERVICE, use_gpu, NULL);
 }
 
@@ -101,13 +104,16 @@ int main(int argc, char **argv)
 		use_gpu = 0;
 	}
 
-	if (running_server)
-		return server(endpoint, use_gpu);
-	else if (argc > 1) {
-		if ((socket = client_open(endpoint)) < 0) {
-			CheckPoint("---------------");
-			return RET_ERROR;
+	if (running_server) {
+		if (IsRunning(argv[0])) {
+			syslog_error("Service is running ...");
+			exit(-1);
 		}
+		return server(endpoint, use_gpu);
+	}
+	else if (argc > 1) {
+		if ((socket = client_open(endpoint)) < 0)
+			return RET_ERROR;
 
 		for (i = optind; i < argc; i++)
 			image_clean(socket, argv[i]);

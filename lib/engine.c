@@ -18,6 +18,10 @@
 // opt/onnxruntime-linux-x64-gpu-1.6.0/include/cuda_provider_factory.h
 #include <cuda_provider_factory.h>
 
+// flock ...
+#include <sys/file.h>
+#include <errno.h>
+
 #include "engine.h"
 #include "grid_sample.h"
 #include "dcnv2_forward.h"
@@ -61,6 +65,19 @@ int RegisterOurOps(OrtSessionOptions *options)
 	}
 
 	return onnx_runtime_api->AddCustomOpDomain(options, domain)? RET_ERROR : RET_OK;
+}
+
+int IsRunning(char *progname)
+{
+	char lock_file[256];
+	snprintf(lock_file, sizeof(lock_file), "/tmp/%s.lock", progname);
+
+	int lock_fd = open(lock_file, O_CREAT|O_RDWR,0666);
+	int rc = flock(lock_fd, LOCK_EX|LOCK_NB);
+	if(rc) {
+		return (EWOULDBLOCK == errno)? 1 : 0; 
+	}
+	return 0;
 }
 
 void InitInputNodes(OrtEngine * t)

@@ -262,7 +262,10 @@ int main(int argc, char **argv)
 	}
 
 	if (running_server) {
-
+		if (IsRunning(argv[0])) {
+			syslog_error("Service is running ...");
+			exit(-1);
+		}
 		return color_server(endpoint, use_gpu);
 	}
 	else if (argc > 1) {

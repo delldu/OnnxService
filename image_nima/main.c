@@ -21,7 +21,8 @@
 int server(char *endpoint, int use_gpu)
 {
 	// Nima model input: 1 x 3 x 224 x 224, output 1 x 10
-	InitEngineRunningTime();
+	InitEngineRunningTime();	// aviod compiler compaint
+
 	return OnnxService(endpoint, (char *)"image_nima.onnx", IMAGE_NIMA_SERVICE, use_gpu, NULL);
 }
 
@@ -110,8 +111,13 @@ int main(int argc, char **argv)
 		}
 	}
 
-	if (running_server)
+	if (running_server) {
+		if (IsRunning(argv[0])) {
+			syslog_error("Service is running ...");
+			exit(-1);
+		}		
 		return server(endpoint, use_gpu);
+	}
 	else if (argc > 1) {
 		if ((socket = client_open(endpoint)) < 0)
 			return RET_ERROR;

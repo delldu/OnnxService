@@ -238,6 +238,7 @@ int SlowService(char *endpoint, int use_gpu)
 	OrtEngine *at_engine = NULL;
 
 	srand(time(NULL));
+	InitEngineRunningTime();	// aviod compiler compaint
 
 	if ((socket = server_open(endpoint)) < 0)
 		return RET_ERROR;
@@ -411,8 +412,13 @@ int main(int argc, char **argv)
 		}
 	}
 
-	if (running_server)
+	if (running_server) {
+		if (IsRunning(argv[0])) {
+			syslog_error("Service is running ...");
+			exit(-1);
+		}		
 		return server(endpoint, use_gpu);
+	}
 	else if (argc > 1) {
 		if ((socket = client_open(endpoint)) < 0)
 			return RET_ERROR;
