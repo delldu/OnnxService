@@ -67,16 +67,32 @@ int RegisterOurOps(OrtSessionOptions *options)
 	return onnx_runtime_api->AddCustomOpDomain(options, domain)? RET_ERROR : RET_OK;
 }
 
-int IsRunning(char *progname)
+int IsRunning(char *endpoint)
 {
-	char lock_file[256];
-	snprintf(lock_file, sizeof(lock_file), "/tmp/%s.lock", progname);
+	int i, n, fd, rc;
+	char filename[256];
+	char tempstr[256];
 
-	int lock_fd = open(lock_file, O_CREAT|O_RDWR,0666);
-	int rc = flock(lock_fd, LOCK_EX|LOCK_NB);
-	if(rc) {
-		return (EWOULDBLOCK == errno)? 1 : 0; 
+	n = strlen(endpoint);
+	for (i = 0; i < n && i < sizeof(tempstr) - 1; i++) {
+		if (endpoint[i] == '/' || endpoint[i] == ':')
+			tempstr[i] = '_';
+		else
+			tempstr[i] = endpoint[i];
 	}
+	tempstr[i] = '\0';
+
+	snprintf(filename, sizeof(filename), "/tmp/%s.lock", tempstr);
+
+	fd = open(filename, O_CREAT|O_RDWR, 0666);
+	if ((rc = flock(fd, LOCK_EX|LOCK_NB))) {
+		rc = (EWOULDBLOCK == errno)? 1 : 0; 
+	} else {
+		rc = 0;
+	}
+	if (rc)
+		syslog_error("Service is running on %s ...", endpoint);
+
 	return 0;
 }
 
@@ -416,9 +432,9 @@ TENSOR *TensorForward(OrtEngine * engine, TENSOR * input)
 	temp_tensor = tensor_reshape(input, dims[0], dims[1], dims[2], dims[3]);
 	CHECK_TENSOR(temp_tensor);
 	input_ortvalue = CreateOrtTensor(temp_tensor, engine->use_gpu);
-	tensor_destroy(temp_tensor);
 
 	output_ortvalue = SimpleForward(engine, input_ortvalue);
+	tensor_destroy(temp_tensor); // Bug Fix: temp_tensor share data with input_ortvalue ...
 
 	// Format output ...
 	if (ValidOrtTensor(output_ortvalue)) {

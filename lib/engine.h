@@ -46,7 +46,7 @@ typedef int (*CustomSevice) (int, int, TENSOR *);
             } \
     } while(0)
 
-int IsRunning(char *progname);
+int IsRunning(char *endpoint);
 
 OrtEngine *CreateEngine(char *model_path, int use_gpu);
 OrtEngine *CreateEngineFromArray(void *model_data, size_t model_data_length, int use_gpu);
