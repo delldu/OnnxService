@@ -66,7 +66,7 @@ int server(char *endpoint, int use_gpu)
 			output_tensor = TensorForward(pan_engine, input_tensor);
 			time_spend((char *)"Image zoom4x with PAN");
 
-			service_response(socket, IMAGE_ZOOM_SERVICE, output_tensor);
+			service_response(socket, IMAGE_ZOOM_SERVICE_WITH_PAN, output_tensor);
 			tensor_destroy(output_tensor);
 
 			count++;
