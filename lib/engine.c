@@ -74,7 +74,7 @@ int IsRunning(char *endpoint)
 	char tempstr[256];
 
 	n = strlen(endpoint);
-	for (i = 0; i < n && i < sizeof(tempstr) - 1; i++) {
+	for (i = 0; i < n && i < (int)sizeof(tempstr) - 1; i++) {
 		if (endpoint[i] == '/' || endpoint[i] == ':')
 			tempstr[i] = '_';
 		else
@@ -592,7 +592,7 @@ int OnnxServiceFromArray(char *endpoint, void *model_data, size_t model_data_len
 			tensor_destroy(output_tensor);
 			count++;
 		} else {
-			// service_response(sokcet, OUT_OF_SERVICE, NULL);
+			// service_response(sokcet, OUTOF_SERVICE, NULL);
 			custom_service_function(socket, OUTOF_SERVICE, NULL);
 		}
 
