@@ -541,8 +541,7 @@ int OnnxService(char *endpoint, char *onnx_file, int service_code, int use_gpu, 
 
 			count++;
 		} else {
-			// service_response(socket, servicecode, input_tensor)
-			custom_service_function(socket, OUTOF_SERVICE, NULL);
+			custom_service_function(socket, msgcode, input_tensor);
 		}
 
 		tensor_destroy(input_tensor);
@@ -592,8 +591,7 @@ int OnnxServiceFromArray(char *endpoint, void *model_data, size_t model_data_len
 			tensor_destroy(output_tensor);
 			count++;
 		} else {
-			// service_response(sokcet, OUTOF_SERVICE, NULL);
-			custom_service_function(socket, OUTOF_SERVICE, NULL);
+			custom_service_function(socket, msgcode, input_tensor);
 		}
 
 		tensor_destroy(input_tensor);

@@ -29,7 +29,8 @@ int clahe(int socket, int service_code, TENSOR *input_tensor)
 		image_clahe(image, 4, 4, 4.0);
 		output_tensor = tensor_from_image(image, (input_tensor->chan == 4 || input_tensor->chan == 2)?1 : 0);
 		image_destroy(image);
-		service_response(socket, service_code, output_tensor);
+
+		service_response(socket, IMAGE_LIGHT_SERVICE_WITH_CLAHE, output_tensor);
 		tensor_destroy(output_tensor);
 	} else {
 		service_response(socket, OUTOF_SERVICE, NULL);
