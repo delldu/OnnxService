@@ -18,12 +18,80 @@
 #include "engine.h"
 
 
+int NimaService(char *endpoint, int use_gpu, CustomSevice custom_service_function)
+{
+	int i, n;
+	IMAGE *image;
+	float entropy;
+	int socket, count, msgcode;
+	TENSOR *input_tensor, *output_tensor;
+
+	OrtEngine *engine = NULL;
+
+	if ((socket = server_open(endpoint)) < 0)
+		return RET_ERROR;
+
+	if (!custom_service_function)
+		custom_service_function = service_response;
+
+	count = 0;
+	for (;;) {
+		if (EngineIsIdle())
+			StopEngine(engine);
+
+		if (!socket_readable(socket, 1000))	// timeout 1 s
+			continue;
+
+		input_tensor = service_request(socket, &msgcode);
+		if (!tensor_valid(input_tensor))
+			continue;
+
+		if (msgcode == IMAGE_NIMA_SERVICE) {
+			syslog_info("Service %d times", count);
+			StartEngine(engine, (char *)"image_nima.onnx", use_gpu);
+
+			// Real service ...
+			time_reset();
+			output_tensor = TensorForward(engine, input_tensor);
+			time_spend((char *) "Image nima");
+
+			// Update with image entropy ...
+			if (tensor_valid(output_tensor)) {
+				image = image_from_tensor(input_tensor, 0);
+				if (image_valid(image)) {
+					entropy = image_entropy(image);
+					image_destroy(image);
+					n = output_tensor->batch * output_tensor->chan * output_tensor->height * output_tensor->width;
+					for (i = 0; i < n; i++)
+						output_tensor->data[i] *= entropy;
+				}
+			}
+
+			service_response(socket, IMAGE_NIMA_SERVICE, output_tensor);
+			tensor_destroy(output_tensor);
+
+			count++;
+		} else {
+			// service_response(socket, servicecode, input_tensor)
+			custom_service_function(socket, OUTOF_SERVICE, NULL);
+		}
+
+		tensor_destroy(input_tensor);
+	}
+	StopEngine(engine);
+
+	syslog(LOG_INFO, "Service shutdown.\n");
+	server_close(socket);
+
+	return RET_OK;
+}
+
 int server(char *endpoint, int use_gpu)
 {
 	// Nima model input: 1 x 3 x 224 x 224, output 1 x 10
 	InitEngineRunningTime();	// aviod compiler compaint
 
-	return OnnxService(endpoint, (char *)"image_nima.onnx", IMAGE_NIMA_SERVICE, use_gpu, NULL);
+	return NimaService(endpoint, use_gpu, NULL);
 }
 
 void dump(TENSOR * recv_tensor, char *filename)
