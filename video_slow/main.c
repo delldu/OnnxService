@@ -17,61 +17,6 @@
 
 #include "engine.h"
 
-TENSOR *flow_backwarp(TENSOR *image, TENSOR *flow)
-{
-	int i, j, b;
-	float *imap, *jmap, *uflow, *vflow;
-	TENSOR *grid, *output;
-
-	CHECK_TENSOR(image);
-	CHECK_TENSOR(flow);
-
-	if (flow->chan != 2) {
-		syslog_error("Flow must be Bx2xHxW tensor.");
-		return NULL;
-	}
-
-	grid = tensor_create(flow->batch, 2, flow->height, flow->width); CHECK_TENSOR(grid);
-
-	for (b = 0; b < grid->batch; b++) {
-		imap = tensor_start_chan(grid, b, 0);
-		jmap = tensor_start_chan(grid, b, 1);
-
-		uflow = tensor_start_chan(flow, b, 0);
-		vflow = tensor_start_chan(flow, b, 1);
-
-		/*****************************************************
-		* Imap:
-		*   0				0
-		*   1				1
-		*   2				2
-		* ...				...
-		* 512				512
-		*****************************************************/
-		for (i = 0; i < grid->height; i++) {
-			for(j = 0; j < grid->width; j++)
-				*imap++ = (i + *vflow++)/grid->height;	// same cols
-		}
-		/*****************************************************
-		* Jmap:
-		*   0	1	2	...		960
-		*   0	1	2	...		960
-		*   0	1	2	...		960
-		*   0	1	2	...		960
-		*****************************************************/
-		for (i = 0; i < grid->height; i++) {
-			for(j = 0; j < grid->width; j++)
-				*jmap++ = (j + *uflow++)/grid->width;	// same rows
-		}
-	}
-
-	output = tensor_grid_sample(image, grid);
-
-	tensor_destroy(grid);
-
-	return output;
-}
-
 // For scale == 4:
 // input_tensor  -- [1, 6, 512, 960]
 // output_tensor -- [4 - 1, 3, 512, 960]
@@ -135,8 +80,8 @@ TENSOR *slow_do(OrtEngine *fc, OrtEngine *at, TENSOR *input_tensor, int scale)
 	    	F_t_1->data[i] = w[2] * F_0_1->data[i] + w[3] * F_1_0->data[i];
 	    }
 
-        TENSOR *g_I0_F_t_0 = flow_backwarp(I0, F_t_0); CHECK_TENSOR(g_I0_F_t_0);
-        TENSOR *g_I1_F_t_1 = flow_backwarp(I1, F_t_1); CHECK_TENSOR(g_I1_F_t_1);
+        TENSOR *g_I0_F_t_0 = tensor_flow_backwarp(I0, F_t_0); CHECK_TENSOR(g_I0_F_t_0);
+        TENSOR *g_I1_F_t_1 = tensor_flow_backwarp(I1, F_t_1); CHECK_TENSOR(g_I1_F_t_1);
 
 	    // temp_interpolate_input = torch.cat((I0, I1, F_0_1, F_1_0, F_t_1, F_t_0, g_I1_F_t_1, g_I0_F_t_0), dim=1);
 	    // # (Pdb) temp_interpolate_input.size() -- torch.Size([1, 20, 512, 960])
@@ -178,8 +123,8 @@ TENSOR *slow_do(OrtEngine *fc, OrtEngine *at, TENSOR *input_tensor, int scale)
 
 	    tensor_destroy(temp_interpolate_output);
 
-        TENSOR *g_I0_F_t_0_fine = flow_backwarp(I0, F_t_0_f); CHECK_TENSOR(g_I0_F_t_0_fine);
-        TENSOR *g_I1_F_t_1_fine = flow_backwarp(I1, F_t_1_f); CHECK_TENSOR(g_I1_F_t_1_fine);
+        TENSOR *g_I0_F_t_0_fine = tensor_flow_backwarp(I0, F_t_0_f); CHECK_TENSOR(g_I0_F_t_0_fine);
+        TENSOR *g_I1_F_t_1_fine = tensor_flow_backwarp(I1, F_t_1_f); CHECK_TENSOR(g_I1_F_t_1_fine);
 
 	    // w = [1 - t, t]
 	    // output_tensor = (w[0] * g_I0_F_t_0_mask * g_I0_F_t_0_fine 

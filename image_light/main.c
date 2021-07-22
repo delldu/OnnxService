@@ -33,7 +33,7 @@ int clahe(int socket, int service_code, TENSOR *input_tensor)
 		service_response(socket, IMAGE_LIGHT_SERVICE_WITH_CLAHE, output_tensor);
 		tensor_destroy(output_tensor);
 	} else {
-		service_response(socket, OUTOF_SERVICE, NULL);
+		service_response(socket, OUTOF_SERVICE_MESSAGE, NULL);
 	}
 	return RET_OK;
 }

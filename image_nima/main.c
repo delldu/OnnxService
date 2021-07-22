@@ -73,7 +73,7 @@ int NimaService(char *endpoint, int use_gpu, CustomSevice custom_service_functio
 			count++;
 		} else {
 			// service_response(socket, servicecode, input_tensor)
-			custom_service_function(socket, OUTOF_SERVICE, NULL);
+			custom_service_function(socket, OUTOF_SERVICE_MESSAGE, NULL);
 		}
 
 		tensor_destroy(input_tensor);

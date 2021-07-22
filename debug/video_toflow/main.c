@@ -161,7 +161,7 @@ int TOFlowService(char *endpoint, int use_gpu)
 			count++;
 		} else {
 			// service_response(socket, servicecode, input_tensor)
-			service_response(socket, OUTOF_SERVICE, NULL);
+			service_response(socket, OUTOF_SERVICE_MESSAGE, NULL);
 		}
 	}
 	StopEngine(cleanflow_engine);

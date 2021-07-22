@@ -162,7 +162,7 @@ int CleanOnnxService(char *endpoint, char *onnx_file, int use_gpu, CustomSevice 
 			tensor_destroy(output_tensor);
 		} else {
 			// service_response(socket, servicecode, input_tensor)
-			custom_service_function(socket, OUTOF_SERVICE, NULL);
+			custom_service_function(socket, OUTOF_SERVICE_MESSAGE, NULL);
 		}
 		count++;
 
