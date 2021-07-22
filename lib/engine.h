@@ -18,6 +18,8 @@
 
 #include "vision_service.h"
 
+#define MAX_INPUT_TENSORS 8
+
 // ONNX Runtime Engine
 typedef struct {
 	DWORD magic;
@@ -27,8 +29,11 @@ typedef struct {
 	OrtSession *session;
 	OrtSessionOptions *session_options;
 
-	// Last i/o node dims
-	int64_t input_node_dims[4];
+	// input node dims
+	size_t n_input_nodes;
+	int64_t input_node_dims[MAX_INPUT_TENSORS][4];
+
+	// DAG only one output
 	int64_t output_node_dims[4];
 
 	 std::vector < const char *>input_node_names;
@@ -52,7 +57,8 @@ OrtEngine *CreateEngine(char *model_path, int use_gpu);
 OrtEngine *CreateEngineFromArray(void *model_data, size_t model_data_length, int use_gpu);
 
 int ValidEngine(OrtEngine * engine);
-TENSOR *TensorForward(OrtEngine * engine, TENSOR * input);
+TENSOR *SingleTensorForward(OrtEngine * engine, TENSOR * input);
+TENSOR *MultipleTensorForward(OrtEngine * engine, size_t n, TENSOR *inputs[]);
 void DumpEngine(OrtEngine * engine);
 void DestroyEngine(OrtEngine * engine);
 

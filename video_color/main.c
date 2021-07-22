@@ -129,7 +129,7 @@ TENSOR *color_do(OrtEngine *align_engine, OrtEngine *color_engine, TENSOR *input
 	CHECK_TENSOR(align_input);
 	tensor_destroy(input_rgb512_tensor);
 
-	TENSOR *align_output = TensorForward(align_engine, align_input);
+	TENSOR *align_output = SingleTensorForward(align_engine, align_input);
 	CHECK_TENSOR(align_output);
 	tensor_destroy(align_input);
 
@@ -148,7 +148,7 @@ TENSOR *color_do(OrtEngine *align_engine, OrtEngine *color_engine, TENSOR *input
 	TENSOR *color_input = tensor_stack_chan(4, array);
 	CHECK_TENSOR(color_input);
 
-	TENSOR *color_output = TensorForward(color_engine, color_input);
+	TENSOR *color_output = SingleTensorForward(color_engine, color_input);
 
 	CHECK_TENSOR(color_output);		// only ab channels
 	tensor_destroy(global_ab);
@@ -237,7 +237,7 @@ int ColorService(char *endpoint, int use_gpu)
 			tensor_destroy(last_lab512_tensor);
 			last_lab512_tensor = tensor_create(1, 3, 512, 512);
 			check_tensor(last_lab512_tensor);
-			tensor_zero(last_lab512_tensor);
+			tensor_zero_(last_lab512_tensor);
 
 			// Respone echo input_tensor ...
 			tensor_send(socket, VIDEO_REFERENCE_SERVICE, input_tensor);

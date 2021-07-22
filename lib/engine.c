@@ -34,7 +34,10 @@ char *FindModel(char *modelname);
 
 extern void CheckStatus(OrtStatus * status);
 extern OrtValue *CreateOrtTensor(TENSOR * tensor, int gpu);
-extern OrtValue *SimpleForward(OrtEngine * engine, OrtValue * input_tensor);
+
+extern OrtValue *SingleForward(OrtEngine * engine, OrtValue * input_tensor);
+extern OrtValue *MultipleForward(OrtEngine * engine, int n, const OrtValue* const* input_tensors);
+
 extern int ValidOrtTensor(OrtValue * tensor);
 extern size_t OrtTensorDimensions(OrtValue * tensor, int64_t * dims);
 extern float *OrtTensorValues(OrtValue * tensor);
@@ -105,8 +108,9 @@ void InitInputNodes(OrtEngine * t)
 
 	CheckStatus(onnx_runtime_api->SessionGetInputCount(t->session, &num_nodes));
 
+	t->n_input_nodes = num_nodes;
 	syslog_info("Input nodes:");
-	for (size_t i = 0; i < num_nodes; i++) {
+	for (size_t i = 0; i < num_nodes && i < MAX_INPUT_TENSORS ; i++) {
 		char *name;
 
 		CheckStatus(onnx_runtime_api->SessionGetInputName(t->session, i, allocator, &name));
@@ -122,18 +126,18 @@ void InitInputNodes(OrtEngine * t)
 		CheckStatus(onnx_runtime_api->GetTensorElementType(tensor_info, &type));
 
 		CheckStatus(onnx_runtime_api->GetDimensionsCount(tensor_info, &num_dims));
-		if (num_dims > sizeof(t->input_node_dims))
-			num_dims = sizeof(t->input_node_dims);
+		if (num_dims > sizeof(t->input_node_dims[i]))
+			num_dims = sizeof(t->input_node_dims[i]);
 
 		printf("    no=%zu name=\"%s\" type=%d dims=%zu: ", i, name, type, num_dims);
 
-		CheckStatus(onnx_runtime_api->GetDimensions(tensor_info, (int64_t *) t->input_node_dims, num_dims));
+		CheckStatus(onnx_runtime_api->GetDimensions(tensor_info, (int64_t *) t->input_node_dims[i], num_dims));
 
 		for (size_t j = 0; j < num_dims; j++) {
 			if (j < num_dims - 1)
-				printf("%d x ", (int) t->input_node_dims[j]);
+				printf("%d x ", (int) t->input_node_dims[i][j]);
 			else
-				printf("%d\n", (int) t->input_node_dims[j]);
+				printf("%d\n", (int) t->input_node_dims[i][j]);
 		}
 
 		onnx_runtime_api->ReleaseTypeInfo(typeinfo);
@@ -386,7 +390,7 @@ int ValidEngine(OrtEngine * t)
 	return (!t || t->magic != ENGINE_MAGIC) ? 0 : 1;
 }
 
-OrtValue *SimpleForward(OrtEngine * engine, OrtValue * input_tensor)
+OrtValue *SingleForward(OrtEngine * engine, OrtValue * input_tensor)
 {
 	OrtStatus *status;
 	OrtValue *output_tensor = NULL;
@@ -410,7 +414,7 @@ OrtValue *SimpleForward(OrtEngine * engine, OrtValue * input_tensor)
 	return output_tensor;
 }
 
-TENSOR *TensorForward(OrtEngine * engine, TENSOR * input)
+TENSOR *SingleTensorForward(OrtEngine * engine, TENSOR * input)
 {
 	size_t i, size, n_dims;
 	int64_t dims[4];
@@ -426,15 +430,16 @@ TENSOR *TensorForward(OrtEngine * engine, TENSOR * input)
 	dims[2] = input->height;
 	dims[3] = input->width;
 	for (i = 0; i < 4; i++) {
-		if (engine->input_node_dims[i] > 0)
-			dims[i] = (int) engine->input_node_dims[i];
+		if (engine->input_node_dims[0][i] > 0)
+			dims[i] = (int) engine->input_node_dims[0][i];
 	}
 	temp_tensor = tensor_reshape(input, dims[0], dims[1], dims[2], dims[3]);
 	CHECK_TENSOR(temp_tensor);
 	input_ortvalue = CreateOrtTensor(temp_tensor, engine->use_gpu);
 
-	output_ortvalue = SimpleForward(engine, input_ortvalue);
-	tensor_destroy(temp_tensor); // Bug Fix: temp_tensor share data with input_ortvalue ...
+	output_ortvalue = SingleForward(engine, input_ortvalue);
+	// Bug Fix: temp_tensor share data with input_ortvalue, must destroy after SingleForward  ...
+	tensor_destroy(temp_tensor);
 
 	// Format output ...
 	if (ValidOrtTensor(output_ortvalue)) {
@@ -460,18 +465,111 @@ TENSOR *TensorForward(OrtEngine * engine, TENSOR * input)
 	return output;
 }
 
+OrtValue *MultipleForward(OrtEngine * engine, int n, const OrtValue* const* input_tensors)
+{
+	OrtStatus *status;
+	OrtValue *output_tensor = NULL;
+
+	/* prototype
+	   ORT_API2_STATUS(Run, _Inout_ OrtSession* sess, _In_opt_ const OrtRunOptions* run_options,
+	   _In_reads_(input_len) const char* const* input_names,
+	   _In_reads_(input_len) const OrtValue* const* input, size_t input_len,
+	   _In_reads_(output_names_len) const char* const* output_names1, size_t output_names_len,
+	   _Inout_updates_all_(output_names_len) OrtValue** output);
+	 */
+	status = onnx_runtime_api->Run(engine->session, NULL,
+		   engine->input_node_names.data(), input_tensors, n,
+		   engine->output_node_names.data(), 1, &output_tensor);
+
+	CheckStatus(status);
+
+	ValidOrtTensor(output_tensor);
+	return output_tensor;
+}
+
+TENSOR *MultipleTensorForward(OrtEngine * engine, size_t n, TENSOR *inputs[])
+{
+	int64_t dims[4];
+	size_t i, j, size, n_dims;
+	OrtValue *input_ortvalues[MAX_INPUT_TENSORS], *output_ortvalue;
+	TENSOR *temp_tensors[MAX_INPUT_TENSORS];
+	TENSOR *output = NULL;
+
+	if (n != engine->n_input_nodes) {
+		syslog_error("Engine expected %d input tensor, but got %d.", engine->n_input_nodes, n);
+		return NULL;
+	}
+	for (i = 0; i < n; i++)
+		CHECK_TENSOR(inputs[i]);
+
+	// n == engine->n_input_nodes !!!
+	// Format inputs ...
+	for(i = 0; i < n; i++) {
+		dims[0] = inputs[i]->batch;
+		dims[1] = inputs[i]->chan;
+		dims[2] = inputs[i]->height;
+		dims[3] = inputs[i]->width;
+		for (j = 0; j < 4; j++) {
+			if (engine->input_node_dims[i][j] > 0)
+				dims[j] = (int) engine->input_node_dims[i][j];
+		}
+		temp_tensors[i] = tensor_reshape(inputs[i], dims[0], dims[1], dims[2], dims[3]);
+		CHECK_TENSOR(temp_tensors[i]);
+
+		input_ortvalues[i] = CreateOrtTensor(temp_tensors[i], engine->use_gpu);
+	}
+
+	output_ortvalue = MultipleForward(engine, n, input_ortvalues);
+
+	for(i = 0; i < n; i++) {
+		// Bug Fix: temp_tensors[i] share data with input_ortvalue[i], so destroy after forward ...
+		tensor_destroy(temp_tensors[i]);
+	}
+
+	// Format output ...
+	if (ValidOrtTensor(output_ortvalue)) {
+		n_dims = OrtTensorDimensions(output_ortvalue, dims);
+		if (n_dims > 0) {
+			if (n_dims < 4) {
+				// Format: BxCxHxW
+				for (i = 0; i < n_dims; i++)
+					dims[3 - i] = dims[n_dims - i - 1];
+				for (i = 0; i < 4 - n_dims; i++)
+					dims[i] = 1;
+			}
+			output = tensor_create((WORD) dims[0], (WORD) dims[1], (WORD) dims[2], (WORD) dims[3]);
+			CHECK_TENSOR(output);
+			size = output->batch * output->chan * output->height * output->width;
+			memcpy(output->data, OrtTensorValues(output_ortvalue), size * sizeof(float));
+		}
+		DestroyOrtTensor(output_ortvalue);
+	}
+
+	for (i = 0; i < n; i++) {
+		DestroyOrtTensor(input_ortvalues[i]);
+	}
+
+	return output;
+}
+
+
 void DumpEngine(OrtEngine * engine)
 {
+	size_t i;
 	char buf[256];
 
 	if (ValidEngine(engine)) {
 		syslog_info("Engine:");
 
-		snprintf(buf, sizeof(buf) - 1, "    Input %s: %d x %d %d x %d",
-				 engine->input_node_names[0],
-				 (int) engine->input_node_dims[0],
-				 (int) engine->input_node_dims[1], (int) engine->input_node_dims[2], (int) engine->input_node_dims[3]);
-		syslog_info("%s", buf);
+		for (i = 0; i < engine->n_input_nodes; i++) {
+			snprintf(buf, sizeof(buf) - 1, "    Input %s: %d x %d %d x %d",
+					 engine->input_node_names[i],
+					 (int) engine->input_node_dims[i][0],
+					 (int) engine->input_node_dims[i][1], 
+					 (int) engine->input_node_dims[i][2],
+					 (int) engine->input_node_dims[i][3]);
+			syslog_info("%s", buf);
+		}
 
 		snprintf(buf, sizeof(buf) - 1, "    Output %s: %d x %d %d x %d",
 				 engine->output_node_names[0],
@@ -533,7 +631,7 @@ int OnnxService(char *endpoint, char *onnx_file, int service_code, int use_gpu, 
 
 			// Real service ...
 			time_reset();
-			output_tensor = TensorForward(engine, input_tensor);
+			output_tensor = SingleTensorForward(engine, input_tensor);
 			time_spend((char *) "Predict");
 
 			service_response(socket, service_code, output_tensor);
@@ -585,7 +683,7 @@ int OnnxServiceFromArray(char *endpoint, void *model_data, size_t model_data_len
 
 			// Real service ...
 			time_reset();
-			output_tensor = TensorForward(engine, input_tensor);
+			output_tensor = SingleTensorForward(engine, input_tensor);
 			time_spend((char *) "Predict");
 			service_response(socket, service_code, output_tensor);
 			tensor_destroy(output_tensor);

@@ -49,7 +49,7 @@ int VideoCleanService(char *endpoint, int use_gpu)
 
 			// Real service ...
 			time_reset();
-			output_tensor = TensorForward(clean_engine, input_tensor);
+			output_tensor = SingleTensorForward(clean_engine, input_tensor);
 			time_spend((char *)"Video cleaning");
 
 			service_response(socket, VIDEO_CLEAN_SERVICE, output_tensor);

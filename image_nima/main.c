@@ -52,7 +52,7 @@ int NimaService(char *endpoint, int use_gpu, CustomSevice custom_service_functio
 
 			// Real service ...
 			time_reset();
-			output_tensor = TensorForward(engine, input_tensor);
+			output_tensor = SingleTensorForward(engine, input_tensor);
 			time_spend((char *) "Image nima");
 
 			// Update with image entropy ...

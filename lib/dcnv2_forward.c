@@ -45,29 +45,29 @@ void DCNv2ForwardKernel::Compute(OrtKernelContext * context)
 	// const int64_t interpolation_mode = interpolation_mode_;
 
 	const OrtValue *input = ort_.KernelContext_GetInput(context, 0);
-	const float *input_data = reinterpret_cast < const float *>(ort_.GetTensorData < float >(input));
+	// const float *input_data = reinterpret_cast < const float *>(ort_.GetTensorData < float >(input));
 
 	const OrtValue *grid = ort_.KernelContext_GetInput(context, 1);
-	const float *grid_data = reinterpret_cast < const float *>(ort_.GetTensorData < float >(grid));
+	// const float *grid_data = reinterpret_cast < const float *>(ort_.GetTensorData < float >(grid));
 
 	OrtTensorDimensions input_dims(ort_, input);
 	OrtTensorDimensions grid_dims(ort_, grid);
 	int64_t N = input_dims[0];
 	int64_t C = input_dims[1];
-	int64_t inp_H = input_dims[2];
-	int64_t inp_W = input_dims[3];
+	// int64_t inp_H = input_dims[2];
+	// int64_t inp_W = input_dims[3];
 	int64_t out_H = grid_dims[1];
 	int64_t out_W = grid_dims[2];
 
 	std::vector < int64_t > output_dims = {
 	N, C, out_H, out_W};
-	OrtValue *output = ort_.KernelContext_GetOutput(context, 0, output_dims.data(), output_dims.size());
-	float *out_ptr = ort_.GetTensorMutableData < float >(output);
+	// OrtValue *output = ort_.KernelContext_GetOutput(context, 0, output_dims.data(), output_dims.size());
+	// float *out_ptr = ort_.GetTensorMutableData < float >(output);
 
 
-	int64_t out_sN = output_dims[1] * output_dims[2] * output_dims[3];
-	int64_t out_sC = output_dims[2] * output_dims[3];
-	int64_t out_sH = output_dims[3];
-	int64_t out_sW = 1;
+	// int64_t out_sN = output_dims[1] * output_dims[2] * output_dims[3];
+	// int64_t out_sC = output_dims[2] * output_dims[3];
+	// int64_t out_sH = output_dims[3];
+	// int64_t out_sW = 1;
 }
 

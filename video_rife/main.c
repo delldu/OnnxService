@@ -18,7 +18,7 @@
 #include "engine.h"
 
 // For scale == 4:
-// input_tensor  -- [2, 2, 512, 960]
+// input_tensor  -- [2, 3, 512, 960]
 // output_tensor -- [1, 3, 512, 960]
 TENSOR *rife_do(OrtEngine *fc, TENSOR *input_tensor)
 {
@@ -32,7 +32,7 @@ TENSOR *rife_do(OrtEngine *fc, TENSOR *input_tensor)
 		return NULL;
 	}
 
-    output_tensor = TensorForward(fc, input_tensor);
+    output_tensor = SingleTensorForward(fc, input_tensor);
     CHECK_TENSOR(output_tensor);
 
 	return output_tensor;

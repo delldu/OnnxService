@@ -42,7 +42,7 @@ TENSOR *slow_do(OrtEngine *fc, OrtEngine *at, TENSOR *input_tensor, int scale)
 	I1 = tensor_slice_chan(input_tensor, 3, 6); CHECK_TENSOR(I1);
 	// SaveTensorAsImage(I1, "I1.png");
 
-    flowOut = TensorForward(fc, input_tensor);
+    flowOut = SingleTensorForward(fc, input_tensor);
     CHECK_TENSOR(flowOut);
 	// # flowOut.size() -- torch.Size([1, 4, 512, 960])
 
@@ -97,7 +97,7 @@ TENSOR *slow_do(OrtEngine *fc, OrtEngine *at, TENSOR *input_tensor, int scale)
 	   	to = tensor_start_chan(temp_interpolate_input, 0, 14); memcpy(to, g_I1_F_t_1->data, 3 * n * sizeof(float));
 	   	to = tensor_start_chan(temp_interpolate_input, 0, 17); memcpy(to, g_I0_F_t_0->data, 3 * n * sizeof(float));
 
-        TENSOR *temp_interpolate_output = TensorForward(at, temp_interpolate_input);
+        TENSOR *temp_interpolate_output = SingleTensorForward(at, temp_interpolate_input);
         CHECK_TENSOR(temp_interpolate_output);
 	    // # (Pdb) temp_interpolate_output.size() -- torch.Size([1, 5, 512, 960])
 	    tensor_destroy(temp_interpolate_input);

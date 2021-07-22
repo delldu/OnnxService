@@ -131,7 +131,7 @@ int CleanOnnxService(char *endpoint, char *onnx_file, int use_gpu, CustomSevice 
 
 			// Real service ...
 			time_reset();
-			output_tensor = TensorForward(engine, input_tensor);
+			output_tensor = SingleTensorForward(engine, input_tensor);
 			time_spend((char *) "Deep cleaning");
 
 			service_response(socket, IMAGE_CLEAN_SERVICE, output_tensor);

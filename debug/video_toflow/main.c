@@ -30,7 +30,7 @@ TENSOR *slowflow_do(OrtEngine *fc, TENSOR *input_tensor)
 		return NULL;
 	}
 
-    output_tensor = TensorForward(fc, input_tensor);
+    output_tensor = SingleTensorForward(fc, input_tensor);
     CHECK_TENSOR(output_tensor);
 
 	return output_tensor;
@@ -49,7 +49,7 @@ TENSOR *zoomflow_do(OrtEngine *fc, TENSOR *input_tensor)
 		return NULL;
 	}
 
-    output_tensor = TensorForward(fc, input_tensor);
+    output_tensor = SingleTensorForward(fc, input_tensor);
     CHECK_TENSOR(output_tensor);
 
 	return output_tensor;
@@ -68,7 +68,7 @@ TENSOR *cleanflow_do(OrtEngine *fc, TENSOR *input_tensor)
 		return NULL;
 	}
 
-    output_tensor = TensorForward(fc, input_tensor);
+    output_tensor = SingleTensorForward(fc, input_tensor);
     CHECK_TENSOR(output_tensor);
 
 	return output_tensor;

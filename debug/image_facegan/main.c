@@ -178,7 +178,7 @@ TENSOR *random_wcode()
 	CHECK_TENSOR(zcode_tensor);
 
 	// Compute wcode
-	wcode_tensor = TensorForward(transformer_engine, zcode_tensor);
+	wcode_tensor = SingleTensorForward(transformer_engine, zcode_tensor);
 	CHECK_TENSOR(wcode_tensor);
 
 	tensor_destroy(zcode_tensor);
@@ -208,7 +208,7 @@ float wcode_loss(TENSOR *wcode_tensor)
 
 	CheckEngine(decoder_engine);
 
-	output_image_tensor = TensorForward(decoder_engine, wcode_tensor);
+	output_image_tensor = SingleTensorForward(decoder_engine, wcode_tensor);
 
 	if (! tensor_valid(output_image_tensor)) {
 		syslog_error("Generate image.");
@@ -242,7 +242,7 @@ float wcode_loss(TENSOR *wcode_tensor)
 	memcpy(loss_input_tensor->data, standard_tensor->data, n * sizeof(float));
 	memcpy(&loss_input_tensor->data[n], output_tensor->data, n * sizeof(float));
 
-	loss_tensor = TensorForward(loss_engine, loss_input_tensor);
+	loss_tensor = SingleTensorForward(loss_engine, loss_input_tensor);
 	if (! tensor_valid(loss_tensor)) {
 		return 11.0;
 	}
@@ -378,7 +378,7 @@ int FaceGanService111(char *endpoint, int use_gpu)
 		time_reset();
 		wcode_tensor = face_search(input_tensor); check_tensor(wcode_tensor);
 
-		output_tensor = TensorForward(decoder_engine, wcode_tensor);
+		output_tensor = SingleTensorForward(decoder_engine, wcode_tensor);
 		time_spend((char *)"Infer");
 
 		if (tensor_valid(output_tensor)) {
@@ -439,7 +439,7 @@ int FaceGanService(char *endpoint, int use_gpu, CustomSevice custom_service_func
 
 			// Real service ...
 			time_reset();
-			output_tensor = TensorForward(engine, input_tensor);
+			output_tensor = SingleTensorForward(engine, input_tensor);
 			time_spend((char *) "Predict");
 
 			service_response(socket, IMAGE_FACEGAN_SERVICE, output_tensor);
@@ -515,7 +515,7 @@ int test(int use_gpu)
 	wcode_tensor = random_wcode();
 	check_tensor(wcode_tensor);
 
-	output_tensor = TensorForward(decoder_engine, wcode_tensor);
+	output_tensor = SingleTensorForward(decoder_engine, wcode_tensor);
 	time_spend((char *)"Infer");
 
 	image = image_from_tensor(output_tensor, 0);
