@@ -37,13 +37,8 @@ TENSOR *zoomx_do(OrtEngine *encoder, OrtEngine *transform, TENSOR *input_tensor,
 
 	grid = tensor_make_grid(input_tensor->batch, h, w); CHECK_TENSOR(grid);
 	tensor_view_(grid, input_tensor->batch, 2, h * w, 1); // [1, 2, h, w] ==> [1, 2, h * w, 1]
-	CheckPoint("Grid Tensor:");
-	tensor_show(grid);
-
 	cell = tensor_make_cell(input_tensor->batch, h, w); CHECK_TENSOR(cell);
 	tensor_view_(cell, input_tensor->batch, 2, h * w, 1); // [1, 2, h, w] ==> [1, 2, h * w, 1]
-	CheckPoint("Cell Tensor:");
-	tensor_show(cell);
 
 	feat = SingleTensorForward(encoder, input_tensor); CHECK_TENSOR(feat);
 	feat_grid = tensor_make_grid(feat->batch, feat->height, feat->width); CHECK_TENSOR(feat_grid);
@@ -55,15 +50,9 @@ TENSOR *zoomx_do(OrtEngine *encoder, OrtEngine *transform, TENSOR *input_tensor,
 		if (stop > n)
 			stop = n;
 
-		CheckPoint("start=%d, stop = %d", start, stop);
-
 		sub_grid = tensor_slice_row(grid, start, stop); CHECK_TENSOR(sub_grid);
-		CheckPoint("Sub Grid Tensor: start=%d, stop = %d", start, stop);
-		tensor_show(sub_grid);
 
 		sub_cell = tensor_slice_row(cell, start, stop); CHECK_TENSOR(sub_cell);
-		CheckPoint("Sub Cell Tensor:");
-		tensor_show(sub_cell);
 
 		input_list[0] = feat;
 		input_list[1] = feat_grid;
@@ -76,6 +65,7 @@ TENSOR *zoomx_do(OrtEngine *encoder, OrtEngine *transform, TENSOR *input_tensor,
 
 		tensor_destroy(sub_grid);
 		tensor_destroy(sub_cell);
+		start = stop;
 	}
 
 	output_tensor = tensor_stack_row(count, tensor_list); CHECK_TENSOR(output_tensor);

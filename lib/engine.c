@@ -300,7 +300,6 @@ OrtEngine *CreateEngine(char *model_path, int use_gpu)
 	CheckStatus(onnx_runtime_api->CreateSessionOptions(&(t->session_options)));
 	// CheckStatus(onnx_runtime_api->SetIntraOpNumThreads(t->session_options, 0));  // 0 -- for default 
 
-	// RegisterOurOps, support onnx::grid_sampler
 	RegisterOurOps(t->session_options);
 
 	// Sets graph optimization level
@@ -354,7 +353,6 @@ OrtEngine *CreateEngineFromArray(void *model_data, size_t model_data_length, int
 	CheckStatus(onnx_runtime_api->CreateSessionOptions(&(t->session_options)));
 	// CheckStatus(onnx_runtime_api->SetIntraOpNumThreads(t->session_options, 0));  // 0 -- for default 
 
-	// RegisterOurOps, support onnx::grid_sampler
 	RegisterOurOps(t->session_options);
 
 	// Sets graph optimization level
@@ -452,7 +450,7 @@ TENSOR *SingleTensorForward(OrtEngine * engine, TENSOR * input)
 				for (i = 0; i < 4 - n_dims; i++)
 					dims[i] = 1;
 			}
-			output = tensor_create((WORD) dims[0], (WORD) dims[1], (WORD) dims[2], (WORD) dims[3]);
+			output = tensor_create(dims[0], dims[1], dims[2], dims[3]);
 			CHECK_TENSOR(output);
 			size = output->batch * output->chan * output->height * output->width;
 			memcpy(output->data, OrtTensorValues(output_ortvalue), size * sizeof(float));
@@ -522,7 +520,7 @@ TENSOR *MultipleTensorForward(OrtEngine * engine, size_t n, TENSOR *inputs[])
 	output_ortvalue = MultipleForward(engine, n, input_ortvalues);
 
 	for(i = 0; i < n; i++) {
-		// Bug Fix: temp_tensors[i] share data with input_ortvalue[i], so destroy after forward ...
+		// Bug Fix: temp_tensors[i] share data with input_ortvalues[i], so destroy after forward ...
 		tensor_destroy(temp_tensors[i]);
 	}
 
@@ -537,7 +535,7 @@ TENSOR *MultipleTensorForward(OrtEngine * engine, size_t n, TENSOR *inputs[])
 				for (i = 0; i < 4 - n_dims; i++)
 					dims[i] = 1;
 			}
-			output = tensor_create((WORD) dims[0], (WORD) dims[1], (WORD) dims[2], (WORD) dims[3]);
+			output = tensor_create(dims[0], dims[1], dims[2], dims[3]);
 			CHECK_TENSOR(output);
 			size = output->batch * output->chan * output->height * output->width;
 			memcpy(output->data, OrtTensorValues(output_ortvalue), size * sizeof(float));
@@ -545,7 +543,7 @@ TENSOR *MultipleTensorForward(OrtEngine * engine, size_t n, TENSOR *inputs[])
 		DestroyOrtTensor(output_ortvalue);
 	}
 
-	for (i = 0; i < n; i++) {
+	for(i = 0; i < n; i++) {
 		DestroyOrtTensor(input_ortvalues[i]);
 	}
 
