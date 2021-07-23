@@ -40,7 +40,7 @@ GridSampleKernel::GridSampleKernel(OrtApi api, const OrtKernelInfo * info)
 	allocator_ = Ort::AllocatorWithDefaultOptions();
 }
 
-enum GridSamplerInterpolation { Nearest = 0, Bilinear = 1, Bicubic = 2 };
+enum GridSamplerInterpolation { Nearest = 1, Bilinear = 0, Bicubic = 2 };
 enum GridSamplerPadding { Zeros = 0, Border = 1, Reflection = 2 };
 
 template < typename scalar_t >
