@@ -11,51 +11,46 @@
 
 #include <onnxruntime_cxx_api.h>
 
-// input, weight, bias, offset, mask, 
-// stride_h, stride_w, padding_h, padding_w, dilation_h, dilation_w, deformable_groups
+// input, weight, bias, offset, mask,
+// stride_h, stride_w, padding_h, padding_w, dilation_h, dilation_w,
+// deformable_groups
 
 struct DCNv2ForwardKernel {
-	DCNv2ForwardKernel(OrtApi api, const OrtKernelInfo * info);
+  DCNv2ForwardKernel(OrtApi api, const OrtKernelInfo *info);
 
-	void Compute(OrtKernelContext * context);
+  void Compute(OrtKernelContext *context);
 
-  protected:
-	 OrtApi api_;
-	 Ort::CustomOpApi ort_;
-	 const OrtKernelInfo *info_;
-	 Ort::AllocatorWithDefaultOptions allocator_;
+protected:
+  OrtApi api_;
+  Ort::CustomOpApi ort_;
+  const OrtKernelInfo *info_;
+  Ort::AllocatorWithDefaultOptions allocator_;
 
-	// int64_t align_corners_;
-	// int64_t interpolation_mode_;
-	// int64_t padding_mode_;
+  // int64_t align_corners_;
+  // int64_t interpolation_mode_;
+  // int64_t padding_mode_;
 };
 
-struct DCNv2ForwardOp:Ort::CustomOpBase < DCNv2ForwardOp, DCNv2ForwardKernel > {
-	void *CreateKernel(OrtApi api, const OrtKernelInfo * info) const {
-		return new DCNv2ForwardKernel(api, info);
-	};
+struct DCNv2ForwardOp : Ort::CustomOpBase<DCNv2ForwardOp, DCNv2ForwardKernel> {
+  void *CreateKernel(OrtApi api, const OrtKernelInfo *info) const {
+    return new DCNv2ForwardKernel(api, info);
+  };
 
-	const char *GetName() const {
-		return "dcnv2_forward";
-	};
+  const char *GetName() const { return "dcnv2_forward"; };
 
-	size_t GetInputTypeCount() const {
-		return 12;
-	};
-	ONNXTensorElementDataType GetInputType(size_t /*index */ ) const {
-		return ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT;
-	};
+  size_t GetInputTypeCount() const { return 12; };
+  ONNXTensorElementDataType GetInputType(size_t /*index */) const {
+    return ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT;
+  };
 
-	size_t GetOutputTypeCount() const {
-		return 1;
-	};
-	ONNXTensorElementDataType GetOutputType(size_t /*index */ ) const {
-		return ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT;
-	};
+  size_t GetOutputTypeCount() const { return 1; };
+  ONNXTensorElementDataType GetOutputType(size_t /*index */) const {
+    return ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT;
+  };
 
-	const char *GetExecutionProviderType() const {
-		return "CPUExecutionProvider";
-	};
+  const char *GetExecutionProviderType() const {
+    return "CPUExecutionProvider";
+  };
 };
 
 #endif
